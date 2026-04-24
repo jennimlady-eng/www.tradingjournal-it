@@ -11,17 +11,17 @@
 #include <Trade\Trade.mqh>
 input string ConfigFile              = "be_config.txt";
 input double LockInPips              = 0.0;
-input long   MagicFilter             = -1;
-input bool   AllowBuyPositions       = true;
-input bool   AllowSellPositions      = true;
-input double MaxSpreadPips           = 999.0;
+long   MagicFilter             = -1;
+bool   AllowBuyPositions       = true;
+bool   AllowSellPositions      = true;
+double MaxSpreadPips           = 999.0;
 input bool   TestAllowBEWithoutProfit= false;
 input bool   DebugBELogs             = true;
-input bool   AutoAddTicketsToConfig  = true;
-input bool   AutoRemoveCanceledTickets = true;
-input string DefaultBEValue          = "NO";
-input int    DefaultQuickCount       = 3;          // ordini rapidi di default
-input string QuickCountPresets       = "1,2,3,5,10"; // preset selezionabili dal pannello
+bool   AutoAddTicketsToConfig  = true;
+bool   AutoRemoveCanceledTickets = true;
+string DefaultBEValue          = "NO";
+int    DefaultQuickCount       = 3;
+string QuickCountPresets       = "1,2,3,5,10";
 input double DefaultSlPips            = 60.0;       // SL pips di default nel pannello
 input double DefaultRiskEur           = 110.0;      // Rischio EUR di default nel pannello
 input string MainSymbols              = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
