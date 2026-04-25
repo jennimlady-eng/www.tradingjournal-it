@@ -542,15 +542,9 @@ void ProcessBreakEvenAllSymbols()
       double minProfitPips = MathMax(slDistancePips, stopsLevelPips + LockInPips + 1.0);
       if(profPips < minProfitPips)
       {
-         if(profPips < 0.0)
-         {
-            g_configs[cfgIdx].stale = true;
-            PrintFormat("[BE] #%I64u orario %02d:%02d passato in perdita (%.1f pips): BE DIMENTICATO.",
-                        ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips);
-         }
-         else if(DebugBELogs)
-            PrintFormat("[BE] #%I64u profitto %.1f pips < 1:1 RR (serve >=%.1f pips SL), BE non applicato.",
-                        ticket, profPips, minProfitPips);
+         g_configs[cfgIdx].stale = true;
+         PrintFormat("[BE] #%I64u orario %02d:%02d: profitto %.1f pips < 1:1 RR (serve >=%.1f pips): BE DIMENTICATO. Scrivere nuova ora per riarmare.",
+                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips, minProfitPips);
          continue;
       }
       bool ok=ApplyBreakEven(ticket,sym,ptype,openP,curSL,curTP,bid,ask,digits,pipSize,
