@@ -237,11 +237,12 @@ datetime ItalianHourToServerTime(int italianHour)
    // Ora GMT corrispondente all'ora italiana desiderata
    datetime targetGmt = italianMidnight + (italianHour - offset) * 3600;
 
-   // Differenza server-GMT (usa offset cached aggiornato ad ogni tick)
-   int serverGmtDiff = g_serverGmtDiffValid ? g_cachedServerGmtDiff
-                                             : (int)(TimeCurrent() - TimeGMT());
+   // Raffina offset DST per l'ora target (gestisce giorni di transizione)
+   int correctedOffset = GetItalianGmtOffset(targetGmt);
+   if(correctedOffset != offset)
+      targetGmt = italianMidnight + (italianHour - correctedOffset) * 3600;
 
-   return targetGmt + serverGmtDiff;
+   return targetGmt + g_cachedServerGmtDiff;
 }
 
 //+------------------------------------------------------------------+
@@ -336,11 +337,15 @@ void UpdateAll()
    UpdateSessionLabel(sessionName, oraIT);
 
    // Ridisegna linee se cambio giorno (basato sulla data italiana)
-   string currentDate = GetItalianDateStr();
-   if(currentDate != g_lastItalianDate)
+   // Disegna solo se abbiamo un offset server-GMT valido
+   if(g_serverGmtDiffValid)
    {
-      DrawTodaySessionLines();
-      g_lastItalianDate = currentDate;
+      string currentDate = GetItalianDateStr();
+      if(currentDate != g_lastItalianDate)
+      {
+         DrawTodaySessionLines();
+         g_lastItalianDate = currentDate;
+      }
    }
 
    // Log cambio sessione
@@ -378,7 +383,11 @@ int OnCalculate(const int rates_total,
 {
    // Cache server-GMT offset ad ogni tick (TimeCurrent e' fresco qui)
    g_cachedServerGmtDiff = (int)(TimeCurrent() - TimeGMT());
-   g_serverGmtDiffValid  = true;
+   if(!g_serverGmtDiffValid)
+   {
+      g_serverGmtDiffValid = true;
+      g_lastItalianDate = "";  // Forza ridisegno linee al primo tick
+   }
 
    UpdateAll();
    return(rates_total);
