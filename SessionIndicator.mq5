@@ -163,7 +163,8 @@ void GetPriceRange(datetime tStart, datetime tEnd, double &high, double &low)
       return;
    }
 
-   for(int i = 0; i < copied_h; i++)
+   int count = MathMin(copied_h, copied_l);
+   for(int i = 0; i < count; i++)
    {
       if(highs[i] > high) high = highs[i];
       if(lows[i] < low)   low  = lows[i];
@@ -345,7 +346,7 @@ void DrawAllSessions()
    datetime todayMidnight = StructToTime(dtServer);
 
    // Disegna per N giorni indietro + oggi
-   for(int d = -DaysToShow; d <= 1; d++)
+   for(int d = -DaysToShow; d <= 0; d++)
    {
       datetime dayMidnight = todayMidnight + d * 86400;
 
