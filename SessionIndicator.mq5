@@ -4,7 +4,7 @@
 //|   Rettangoli: London, New York                                   |
 //|   Tabella FOREX Session compatta in alto a SINISTRA              |
 //|   Linea verticale rosso fuoco al cambio ora legale italiana      |
-//|   Auto-applica su tutti i grafici con simboli consentiti         |
+//|   Usa ApplySessionIndicator.mq5 per applicare su tutti i grafici |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
@@ -46,7 +46,6 @@ input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,
 
 //--- Costanti ---
 #define NUM_SESS     7
-#define GV_MASTER    "SI_MasterChartID"
 
 // Layout tabella compatta (CORNER_LEFT_UPPER)
 #define TBL_MARGIN   8
@@ -68,8 +67,6 @@ bool   g_diffOk     = false;
 int    g_lastBars   = 0;
 bool   g_tblOk      = false;
 bool   g_rectsDrawn = false;
-bool   g_isMaster   = false;
-datetime g_lastScan = 0;
 
 //--- Dati sessioni per tabella ---
 string g_sName[NUM_SESS];
@@ -108,49 +105,6 @@ bool IsSymbolInList(string sym)
       if(StringFind(sym, parts[i]) >= 0) return true;
    }
    return false;
-}
-
-//+------------------------------------------------------------------+
-//| Auto-applica indicatore su tutti i grafici aperti                |
-//+------------------------------------------------------------------+
-void ScanAndApplyToCharts()
-{
-   long cid = ChartFirst();
-   while(cid >= 0)
-   {
-      if(cid != ChartID())
-      {
-         string sym = ChartSymbol(cid);
-         if(IsSymbolInList(sym))
-         {
-            bool found = false;
-            int total = ChartIndicatorsTotal(cid, 0);
-            for(int j = 0; j < total; j++)
-            {
-               string indName = ChartIndicatorName(cid, 0, j);
-               if(StringFind(indName, "SessionIndicator") >= 0)
-               { found = true; break; }
-            }
-            if(!found)
-            {
-               int h = iCustom(sym, ChartPeriod(cid), "SessionIndicator",
-                  _sep1_, LondonOpenIT, LondonCloseIT, NewYorkOpenIT, NewYorkCloseIT,
-                  ColorLondon, ColorNewYork, BorderLondon, BorderNewYork,
-                  LblColorLondon, LblColorNewYork, LabelFontSize,
-                  _sep2_, ShowDSTLine, DSTLineColor, DSTLineWidth, DSTLineStyle,
-                  _sep3_, ShowTable,
-                  _sep4_, DaysToShow, AutoDST, ManualGmtOffset, AllowedSymbols);
-               if(h != INVALID_HANDLE)
-               {
-                  ChartIndicatorAdd(cid, 0, h);
-                  Print("SessionIndicator auto-applicato su ", sym);
-               }
-            }
-         }
-      }
-      cid = ChartNext(cid);
-   }
-   g_lastScan = TimeCurrent();
 }
 
 //+------------------------------------------------------------------+
@@ -659,14 +613,6 @@ int OnInit()
    InitSessData();
    EventSetTimer(1);
 
-   double masterVal = 0;
-   if(!GlobalVariableGet(GV_MASTER, masterVal) || masterVal == 0)
-   {
-      GlobalVariableSet(GV_MASTER, (double)chartId);
-      g_isMaster = true;
-      ScanAndApplyToCharts();
-   }
-
    return(INIT_SUCCEEDED);
 }
 
@@ -677,9 +623,6 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    Cleanup();
-
-   if(g_isMaster)
-      GlobalVariableDel(GV_MASTER);
 
    ChartRedraw(0);
 }
@@ -711,21 +654,6 @@ void OnTimer()
    {
       if(!g_tblOk) CreateTable();
       UpdateTable();
-   }
-
-   // Master: ogni 10 sec controlla nuovi grafici aperti
-   if(g_isMaster && TimeCurrent() - g_lastScan > 10)
-      ScanAndApplyToCharts();
-
-   // Se il master non esiste piu, diventa master
-   if(!g_isMaster)
-   {
-      double v = 0;
-      if(!GlobalVariableGet(GV_MASTER, v) || v == 0)
-      {
-         GlobalVariableSet(GV_MASTER, (double)ChartID());
-         g_isMaster = true;
-      }
    }
 
    ChartRedraw(0);
