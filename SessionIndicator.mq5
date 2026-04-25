@@ -1,60 +1,64 @@
 //+------------------------------------------------------------------+
 //|                                          SessionIndicator.mq5    |
-//|   Indicatore sessioni di trading con gestione ora legale IT      |
-//|   Sessioni: Asia (Tokyo), Londra, New York + Overlap             |
+//|   Indicatore sessioni di trading con rettangoli colorati         |
+//|   Sydney, Asia/Tokyo, Europe/London, New York                    |
+//|   + Gestione automatica ora legale italiana (CET/CEST)           |
+//|   + Linea verticale al cambio ora legale                         |
 //|                        Compatible with MetaTrader 5              |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "1.00"
+#property version     "2.00"
 #property indicator_chart_window
 #property indicator_plots 0
 
-//--- Input configurabili dall'utente ---
+//--- Sessioni (ora italiana) ---
 input string   _sep1_              = "=== SESSIONI (ora italiana) ===";
-input int      AsiaOpen            = 2;     // Asia apertura (ora IT)
-input int      AsiaClose           = 10;    // Asia chiusura (ora IT)
-input int      LondonOpen          = 10;    // Londra apertura (ora IT)
-input int      LondonClose         = 18;    // Londra chiusura (ora IT)
+input int      SydneyOpen          = 23;    // Sydney apertura (ora IT)
+input int      SydneyClose         = 8;     // Sydney chiusura (ora IT)
+input int      AsiaOpen            = 2;     // Asia/Tokyo apertura (ora IT)
+input int      AsiaClose           = 10;    // Asia/Tokyo chiusura (ora IT)
+input int      EuropeOpen          = 9;     // Europe/London apertura (ora IT)
+input int      EuropeClose         = 18;    // Europe/London chiusura (ora IT)
 input int      NewYorkOpen         = 15;    // New York apertura (ora IT)
 input int      NewYorkClose        = 23;    // New York chiusura (ora IT)
 
-input string   _sep2_              = "=== COLORI SFONDO ===";
-input color    ColorAsia           = clrMidnightBlue;    // Colore Asia
-input color    ColorLondon         = clrDarkBlue;        // Colore Londra
-input color    ColorNewYork        = clrDarkGreen;       // Colore New York
-input color    ColorOverlapLdnNy   = clrDarkSlateBlue;   // Colore Overlap Londra/NY
-input color    ColorOverlapAsiaLdn = clrDarkCyan;        // Colore Overlap Asia/Londra
-input color    ColorOff            = clrBlack;           // Colore fuori sessione
+//--- Colori rettangoli ---
+input string   _sep2_              = "=== COLORI RETTANGOLI ===";
+input color    ColorSydney         = clrMistyRose;       // Colore Sydney
+input color    ColorAsia           = clrLightCyan;       // Colore Asia/Tokyo
+input color    ColorEurope         = clrHoneydew;        // Colore Europe/London
+input color    ColorNewYork        = clrLavender;        // Colore New York
 
-input string   _sep3_              = "=== LINEE VERTICALI ===";
-input bool     ShowVerticalLines   = true;   // Mostra linee verticali
-input color    VLineColorAsia      = clrDodgerBlue;      // Colore linea Asia
-input color    VLineColorLondon    = clrRoyalBlue;       // Colore linea Londra
-input color    VLineColorNewYork   = clrLimeGreen;       // Colore linea New York
-input ENUM_LINE_STYLE VLineStyle   = STYLE_DOT;          // Stile linea
-input int      VLineWidth          = 1;                  // Spessore linea
+//--- Colori etichette ---
+input string   _sep3_              = "=== COLORI ETICHETTE ===";
+input color    LabelColorSydney    = clrCoral;           // Etichetta Sydney
+input color    LabelColorAsia      = clrDarkCyan;        // Etichetta Asia/Tokyo
+input color    LabelColorEurope    = clrGreen;           // Etichetta Europe/London
+input color    LabelColorNewYork   = clrMediumSlateBlue; // Etichetta New York
+input int      LabelFontSize       = 10;                 // Dimensione font etichette
 
-input string   _sep4_              = "=== ETICHETTA ===";
-input bool     ShowLabel           = true;               // Mostra etichetta sessione
-input int      LabelX              = 10;                 // Posizione X etichetta
-input int      LabelY              = 30;                 // Posizione Y etichetta
-input int      LabelFontSize       = 12;                 // Dimensione font
-input color    LabelColor          = clrWhite;           // Colore testo etichetta
+//--- Linea cambio ora legale ---
+input string   _sep4_              = "=== LINEA CAMBIO ORA LEGALE ===";
+input bool     ShowDSTLine         = true;               // Mostra linea cambio ora legale
+input color    DSTLineColor        = clrRed;             // Colore linea DST
+input int      DSTLineWidth        = 2;                  // Spessore linea DST
 
+//--- Fuso orario ---
 input string   _sep5_              = "=== FUSO ORARIO ===";
 input bool     AutoDST             = true;  // Gestione automatica ora legale italiana
-input int      ManualGmtOffset     = 1;     // Offset GMT manuale (usato se AutoDST=false)
+input int      ManualGmtOffset     = 1;     // Offset GMT manuale (se AutoDST=false)
+
+//--- Quanti giorni di sessioni disegnare ---
+input int      DaysToShow          = 30;    // Giorni di sessioni da mostrare
 
 //--- Costanti ---
 #define PREFIX_SI "SI_"
 
 //--- Variabili globali ---
-color  g_originalBg = clrBlack;
-string g_lastItalianDate = "";
-string g_lastSessionName = "";
 int    g_cachedServerGmtDiff = 0;
 bool   g_serverGmtDiffValid  = false;
+int    g_lastDrawnBars = 0;
 
 //+------------------------------------------------------------------+
 //| Calcola l'ultimo giorno domenica di un dato mese/anno            |
@@ -70,16 +74,12 @@ int LastSundayOfMonth(int year, int month)
          lastDay = 29;
    }
 
-   // Zeller's algorithm
-   int q = lastDay;
-   int m = month;
-   int y = year;
+   int q = lastDay, m = month, y = year;
    if(m < 3) { m += 12; y--; }
    int k = y % 100;
    int j = y / 100;
    int h = (q + (13 * (m + 1)) / 5 + k + k / 4 + j / 4 - 2 * j) % 7;
    if(h < 0) h += 7;
-   // h: 0=Sab, 1=Dom, 2=Lun, 3=Mar, 4=Mer, 5=Gio, 6=Ven
 
    int daysBack = (h == 1) ? 0 : (h == 0) ? 6 : h - 1;
    return lastDay - daysBack;
@@ -87,15 +87,11 @@ int LastSundayOfMonth(int year, int month)
 
 //+------------------------------------------------------------------+
 //| Determina se una data/ora GMT e' in ora legale italiana (CEST)   |
-//| CET  = UTC+1 (inverno)                                          |
-//| CEST = UTC+2 (estate, ultima dom. marzo 01:00 UTC ->            |
-//|                        ultima dom. ottobre 01:00 UTC)            |
 //+------------------------------------------------------------------+
 bool IsItalianDST(datetime gmtTime)
 {
    MqlDateTime dt;
    TimeToStruct(gmtTime, dt);
-
    int year = dt.year;
 
    int marchSunday   = LastSundayOfMonth(year, 3);
@@ -117,155 +113,253 @@ int GetItalianGmtOffset(datetime gmtTime)
 }
 
 //+------------------------------------------------------------------+
-//| Converte l'ora del server MT5 in ora italiana                    |
+//| Converte ora italiana in server time per un dato giorno          |
+//| dayBase = mezzanotte server del giorno di riferimento            |
 //+------------------------------------------------------------------+
-int GetItalianHour()
+datetime ItalianHourToServerTime(int italianHour, datetime serverMidnight)
 {
-   datetime gmtTime = TimeGMT();
-   int offset = GetItalianGmtOffset(gmtTime);
-   MqlDateTime dt;
-   TimeToStruct(gmtTime + offset * 3600, dt);
-   return dt.hour;
-}
+   datetime gmtMidnight = serverMidnight - g_cachedServerGmtDiff;
+   int offset = GetItalianGmtOffset(gmtMidnight);
 
-//+------------------------------------------------------------------+
-//| Ritorna il nome della sessione attiva                            |
-//+------------------------------------------------------------------+
-string GetSessionName(int oraIT)
-{
-   bool asia    = (oraIT >= AsiaOpen    && oraIT < AsiaClose);
-   bool london  = (oraIT >= LondonOpen  && oraIT < LondonClose);
-   bool newyork = (oraIT >= NewYorkOpen && oraIT < NewYorkClose);
+   // GMT target per l'ora italiana richiesta
+   datetime targetGmt = gmtMidnight + (italianHour - offset) * 3600;
 
-   if(london && newyork) return "OVERLAP LDN / NY";
-   if(asia && london)    return "OVERLAP ASIA / LDN";
-   if(newyork)           return "NEW YORK";
-   if(london)            return "LONDRA";
-   if(asia)              return "ASIA (TOKYO)";
-   return "FUORI SESSIONE";
-}
-
-//+------------------------------------------------------------------+
-//| Ritorna il colore di sfondo per la sessione attiva               |
-//+------------------------------------------------------------------+
-color GetSessionColor(int oraIT)
-{
-   bool asia    = (oraIT >= AsiaOpen    && oraIT < AsiaClose);
-   bool london  = (oraIT >= LondonOpen  && oraIT < LondonClose);
-   bool newyork = (oraIT >= NewYorkOpen && oraIT < NewYorkClose);
-
-   if(london && newyork) return ColorOverlapLdnNy;
-   if(asia && london)    return ColorOverlapAsiaLdn;
-   if(newyork)           return ColorNewYork;
-   if(london)            return ColorLondon;
-   if(asia)              return ColorAsia;
-   return ColorOff;
-}
-
-//+------------------------------------------------------------------+
-//| Crea o aggiorna l'etichetta della sessione sul grafico           |
-//+------------------------------------------------------------------+
-void UpdateSessionLabel(string sessionName, int oraIT)
-{
-   if(!ShowLabel) return;
-
-   string labelName = PREFIX_SI + "LABEL";
-   int offset = GetItalianGmtOffset(TimeGMT());
-   string dstStr = (AutoDST) ? ((offset == 2) ? " (CEST)" : " (CET)") : "";
-   string text = sessionName + "  |  " + IntegerToString(oraIT) + ":00 IT" + dstStr;
-
-   if(ObjectFind(0, labelName) < 0)
-   {
-      ObjectCreate(0, labelName, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, labelName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-      ObjectSetInteger(0, labelName, OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
-   }
-
-   ObjectSetInteger(0, labelName, OBJPROP_XDISTANCE, LabelX);
-   ObjectSetInteger(0, labelName, OBJPROP_YDISTANCE, LabelY);
-   ObjectSetString(0, labelName, OBJPROP_TEXT, text);
-   ObjectSetString(0, labelName, OBJPROP_FONT, "Arial Bold");
-   ObjectSetInteger(0, labelName, OBJPROP_FONTSIZE, LabelFontSize);
-   ObjectSetInteger(0, labelName, OBJPROP_COLOR, LabelColor);
-   ObjectSetInteger(0, labelName, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, labelName, OBJPROP_HIDDEN, true);
-}
-
-//+------------------------------------------------------------------+
-//| Disegna una linea verticale per apertura/chiusura sessione       |
-//+------------------------------------------------------------------+
-void DrawSessionLine(datetime time, string name, color clr, string tooltip)
-{
-   if(!ShowVerticalLines) return;
-
-   string objName = PREFIX_SI + "VL_" + name + "_" + TimeToString(time, TIME_DATE);
-
-   if(ObjectFind(0, objName) >= 0)
-   {
-      ObjectSetInteger(0, objName, OBJPROP_TIME, 0, time);
-      return;
-   }
-
-   ObjectCreate(0, objName, OBJ_VLINE, 0, time, 0);
-   ObjectSetInteger(0, objName, OBJPROP_COLOR, clr);
-   ObjectSetInteger(0, objName, OBJPROP_STYLE, VLineStyle);
-   ObjectSetInteger(0, objName, OBJPROP_WIDTH, VLineWidth);
-   ObjectSetInteger(0, objName, OBJPROP_BACK, true);
-   ObjectSetInteger(0, objName, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, objName, OBJPROP_HIDDEN, true);
-   ObjectSetString(0, objName, OBJPROP_TOOLTIP, tooltip);
-}
-
-//+------------------------------------------------------------------+
-//| Calcola la datetime per un'ora italiana di oggi                   |
-//| e la converte in ora del server per disegnare le linee           |
-//+------------------------------------------------------------------+
-datetime ItalianHourToServerTime(int italianHour)
-{
-   datetime gmtNow = TimeGMT();
-   int offset = GetItalianGmtOffset(gmtNow);
-
-   // Calcola la mezzanotte italiana di oggi (in Italian time), poi converti in GMT
-   datetime italianNow = gmtNow + offset * 3600;
-   MqlDateTime dtIt;
-   TimeToStruct(italianNow, dtIt);
-   dtIt.hour = 0;
-   dtIt.min  = 0;
-   dtIt.sec  = 0;
-   datetime italianMidnight = StructToTime(dtIt);
-
-   // Ora GMT corrispondente all'ora italiana desiderata
-   datetime targetGmt = italianMidnight + (italianHour - offset) * 3600;
-
-   // Raffina offset DST per l'ora target (gestisce giorni di transizione)
+   // Raffina offset DST per l'ora target
    int correctedOffset = GetItalianGmtOffset(targetGmt);
    if(correctedOffset != offset)
-      targetGmt = italianMidnight + (italianHour - correctedOffset) * 3600;
+      targetGmt = gmtMidnight + (italianHour - correctedOffset) * 3600;
 
    return targetGmt + g_cachedServerGmtDiff;
 }
 
 //+------------------------------------------------------------------+
-//| Disegna tutte le linee verticali per la giornata corrente        |
+//| Trova high e low del prezzo in un range di tempo                 |
 //+------------------------------------------------------------------+
-void DrawTodaySessionLines()
+void GetPriceRange(datetime tStart, datetime tEnd, double &high, double &low)
 {
-   if(!ShowVerticalLines) return;
+   high = 0;
+   low  = DBL_MAX;
 
-   DrawSessionLine(ItalianHourToServerTime(AsiaOpen),
-                   "ASIA_OPEN", VLineColorAsia, "Asia Open " + IntegerToString(AsiaOpen) + ":00 IT");
-   DrawSessionLine(ItalianHourToServerTime(AsiaClose),
-                   "ASIA_CLOSE", VLineColorAsia, "Asia Close " + IntegerToString(AsiaClose) + ":00 IT");
+   int barStart = iBarShift(_Symbol, PERIOD_CURRENT, tStart, false);
+   int barEnd   = iBarShift(_Symbol, PERIOD_CURRENT, tEnd, false);
 
-   DrawSessionLine(ItalianHourToServerTime(LondonOpen),
-                   "LDN_OPEN", VLineColorLondon, "Londra Open " + IntegerToString(LondonOpen) + ":00 IT");
-   DrawSessionLine(ItalianHourToServerTime(LondonClose),
-                   "LDN_CLOSE", VLineColorLondon, "Londra Close " + IntegerToString(LondonClose) + ":00 IT");
+   if(barStart < 0) barStart = 0;
+   if(barEnd < 0)   barEnd = 0;
 
-   DrawSessionLine(ItalianHourToServerTime(NewYorkOpen),
-                   "NY_OPEN", VLineColorNewYork, "New York Open " + IntegerToString(NewYorkOpen) + ":00 IT");
-   DrawSessionLine(ItalianHourToServerTime(NewYorkClose),
-                   "NY_CLOSE", VLineColorNewYork, "New York Close " + IntegerToString(NewYorkClose) + ":00 IT");
+   // barStart e' il piu' vecchio (indice alto), barEnd il piu' recente (indice basso)
+   int from = MathMin(barStart, barEnd);
+   int to   = MathMax(barStart, barEnd);
+
+   if(to - from > 500) to = from + 500;
+
+   double highs[], lows[];
+   int copied_h = CopyHigh(_Symbol, PERIOD_CURRENT, from, to - from + 1, highs);
+   int copied_l = CopyLow(_Symbol, PERIOD_CURRENT, from, to - from + 1, lows);
+
+   if(copied_h <= 0 || copied_l <= 0)
+   {
+      high = iHigh(_Symbol, PERIOD_CURRENT, from);
+      low  = iLow(_Symbol, PERIOD_CURRENT, from);
+      return;
+   }
+
+   for(int i = 0; i < copied_h; i++)
+   {
+      if(highs[i] > high) high = highs[i];
+      if(lows[i] < low)   low  = lows[i];
+   }
+
+   if(high <= 0 || low >= DBL_MAX)
+   {
+      high = iHigh(_Symbol, PERIOD_CURRENT, 0);
+      low  = iLow(_Symbol, PERIOD_CURRENT, 0);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Disegna un rettangolo sessione con etichetta                     |
+//+------------------------------------------------------------------+
+void DrawSessionRect(string name, datetime tStart, datetime tEnd,
+                     color rectColor, color labelColor, string labelText)
+{
+   double high, low;
+   GetPriceRange(tStart, tEnd, high, low);
+
+   // Aggiungi un po' di margine
+   double range = high - low;
+   if(range <= 0) range = high * 0.001;
+   high += range * 0.02;
+   low  -= range * 0.02;
+
+   // Rettangolo
+   string rectName = PREFIX_SI + "RECT_" + name;
+   if(ObjectFind(0, rectName) >= 0)
+   {
+      ObjectSetInteger(0, rectName, OBJPROP_TIME, 0, tStart);
+      ObjectSetDouble(0, rectName, OBJPROP_PRICE, 0, high);
+      ObjectSetInteger(0, rectName, OBJPROP_TIME, 1, tEnd);
+      ObjectSetDouble(0, rectName, OBJPROP_PRICE, 1, low);
+   }
+   else
+   {
+      ObjectCreate(0, rectName, OBJ_RECTANGLE, 0, tStart, high, tEnd, low);
+      ObjectSetInteger(0, rectName, OBJPROP_COLOR, rectColor);
+      ObjectSetInteger(0, rectName, OBJPROP_FILL, true);
+      ObjectSetInteger(0, rectName, OBJPROP_BACK, true);
+      ObjectSetInteger(0, rectName, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, rectName, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, rectName, OBJPROP_WIDTH, 1);
+      ObjectSetInteger(0, rectName, OBJPROP_STYLE, STYLE_DOT);
+   }
+
+   // Etichetta (testo ancorato al tempo, in alto)
+   string lblName = PREFIX_SI + "LBL_" + name;
+   if(ObjectFind(0, lblName) >= 0)
+   {
+      ObjectSetInteger(0, lblName, OBJPROP_TIME, 0, tStart);
+      ObjectSetDouble(0, lblName, OBJPROP_PRICE, 0, high);
+   }
+   else
+   {
+      ObjectCreate(0, lblName, OBJ_TEXT, 0, tStart, high);
+      ObjectSetString(0, lblName, OBJPROP_TEXT, labelText);
+      ObjectSetString(0, lblName, OBJPROP_FONT, "Arial Bold");
+      ObjectSetInteger(0, lblName, OBJPROP_FONTSIZE, LabelFontSize);
+      ObjectSetInteger(0, lblName, OBJPROP_COLOR, labelColor);
+      ObjectSetInteger(0, lblName, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
+      ObjectSetInteger(0, lblName, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, lblName, OBJPROP_HIDDEN, true);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Disegna le sessioni per un singolo giorno                        |
+//+------------------------------------------------------------------+
+void DrawDaySessions(datetime serverMidnight, string daySuffix)
+{
+   // Sydney (attraversa la mezzanotte: open giorno-1, close giorno corrente)
+   if(SydneyOpen > SydneyClose)
+   {
+      datetime prevMidnight = serverMidnight - 86400;
+      datetime sydOpen  = ItalianHourToServerTime(SydneyOpen, prevMidnight);
+      datetime sydClose = ItalianHourToServerTime(SydneyClose, serverMidnight);
+      DrawSessionRect("SYD_" + daySuffix, sydOpen, sydClose,
+                      ColorSydney, LabelColorSydney, "Sydney");
+   }
+   else
+   {
+      datetime sydOpen  = ItalianHourToServerTime(SydneyOpen, serverMidnight);
+      datetime sydClose = ItalianHourToServerTime(SydneyClose, serverMidnight);
+      DrawSessionRect("SYD_" + daySuffix, sydOpen, sydClose,
+                      ColorSydney, LabelColorSydney, "Sydney");
+   }
+
+   // Asia / Tokyo
+   datetime asiaOpen  = ItalianHourToServerTime(AsiaOpen, serverMidnight);
+   datetime asiaClose = ItalianHourToServerTime(AsiaClose, serverMidnight);
+   DrawSessionRect("ASIA_" + daySuffix, asiaOpen, asiaClose,
+                   ColorAsia, LabelColorAsia, "Asia    Tokyo");
+
+   // Europe / London
+   datetime euroOpen  = ItalianHourToServerTime(EuropeOpen, serverMidnight);
+   datetime euroClose = ItalianHourToServerTime(EuropeClose, serverMidnight);
+   DrawSessionRect("EUR_" + daySuffix, euroOpen, euroClose,
+                   ColorEurope, LabelColorEurope, "Europe    London");
+
+   // New York
+   datetime nyOpen  = ItalianHourToServerTime(NewYorkOpen, serverMidnight);
+   datetime nyClose = ItalianHourToServerTime(NewYorkClose, serverMidnight);
+   DrawSessionRect("NY_" + daySuffix, nyOpen, nyClose,
+                   ColorNewYork, LabelColorNewYork, "New York");
+}
+
+//+------------------------------------------------------------------+
+//| Disegna la linea verticale al cambio ora legale                  |
+//+------------------------------------------------------------------+
+void DrawDSTLines()
+{
+   if(!ShowDSTLine) return;
+
+   datetime gmtNow = TimeGMT();
+   MqlDateTime dtNow;
+   TimeToStruct(gmtNow, dtNow);
+   int year = dtNow.year;
+
+   // Controlla anno corrente e precedente
+   for(int y = year - 1; y <= year; y++)
+   {
+      int marchSun   = LastSundayOfMonth(y, 3);
+      int octoberSun = LastSundayOfMonth(y, 10);
+
+      // Inizio CEST (ultima domenica di marzo alle 01:00 UTC)
+      datetime dstStartGmt = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 3, marchSun));
+      datetime dstStartServer = dstStartGmt + g_cachedServerGmtDiff;
+
+      string nameStart = PREFIX_SI + "DST_START_" + IntegerToString(y);
+      if(ObjectFind(0, nameStart) < 0)
+      {
+         ObjectCreate(0, nameStart, OBJ_VLINE, 0, dstStartServer, 0);
+         ObjectSetInteger(0, nameStart, OBJPROP_COLOR, DSTLineColor);
+         ObjectSetInteger(0, nameStart, OBJPROP_WIDTH, DSTLineWidth);
+         ObjectSetInteger(0, nameStart, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, nameStart, OBJPROP_BACK, false);
+         ObjectSetInteger(0, nameStart, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, nameStart, OBJPROP_HIDDEN, true);
+         ObjectSetString(0, nameStart, OBJPROP_TOOLTIP,
+                         "Inizio ora legale (CEST) " + IntegerToString(y));
+      }
+
+      // Fine CEST (ultima domenica di ottobre alle 01:00 UTC)
+      datetime dstEndGmt = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 10, octoberSun));
+      datetime dstEndServer = dstEndGmt + g_cachedServerGmtDiff;
+
+      string nameEnd = PREFIX_SI + "DST_END_" + IntegerToString(y);
+      if(ObjectFind(0, nameEnd) < 0)
+      {
+         ObjectCreate(0, nameEnd, OBJ_VLINE, 0, dstEndServer, 0);
+         ObjectSetInteger(0, nameEnd, OBJPROP_COLOR, DSTLineColor);
+         ObjectSetInteger(0, nameEnd, OBJPROP_WIDTH, DSTLineWidth);
+         ObjectSetInteger(0, nameEnd, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, nameEnd, OBJPROP_BACK, false);
+         ObjectSetInteger(0, nameEnd, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(0, nameEnd, OBJPROP_HIDDEN, true);
+         ObjectSetString(0, nameEnd, OBJPROP_TOOLTIP,
+                         "Fine ora legale (CET) " + IntegerToString(y));
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Disegna tutte le sessioni per i giorni visibili                  |
+//+------------------------------------------------------------------+
+void DrawAllSessions()
+{
+   if(!g_serverGmtDiffValid) return;
+
+   // Calcola la mezzanotte server di oggi
+   MqlDateTime dtServer;
+   TimeToStruct(TimeCurrent(), dtServer);
+   dtServer.hour = 0;
+   dtServer.min  = 0;
+   dtServer.sec  = 0;
+   datetime todayMidnight = StructToTime(dtServer);
+
+   // Disegna per N giorni indietro + oggi
+   for(int d = -DaysToShow; d <= 1; d++)
+   {
+      datetime dayMidnight = todayMidnight + d * 86400;
+
+      // Salta weekend (sabato=6, domenica=0)
+      MqlDateTime dtDay;
+      TimeToStruct(dayMidnight, dtDay);
+      if(dtDay.day_of_week == 0 || dtDay.day_of_week == 6) continue;
+
+      string daySuffix = TimeToString(dayMidnight, TIME_DATE);
+      DrawDaySessions(dayMidnight, daySuffix);
+   }
+
+   // Disegna linee cambio ora legale
+   DrawDSTLines();
 }
 
 //+------------------------------------------------------------------+
@@ -287,15 +381,7 @@ void CleanupObjects()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // Salva il colore di sfondo originale per ripristinarlo in OnDeinit
-   g_originalBg = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
-
-   // Aggiorna tutto subito
-   UpdateAll();
-
-   // Timer ogni 30 secondi per aggiornamento continuo
-   EventSetTimer(30);
-
+   EventSetTimer(60);
    return(INIT_SUCCEEDED);
 }
 
@@ -306,69 +392,23 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    CleanupObjects();
-   // Ripristina il colore di sfondo originale
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, g_originalBg);
    ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| Ritorna la data italiana corrente come stringa "YYYY.MM.DD"      |
-//+------------------------------------------------------------------+
-string GetItalianDateStr()
-{
-   datetime gmtNow = TimeGMT();
-   int offset = GetItalianGmtOffset(gmtNow);
-   datetime italianNow = gmtNow + offset * 3600;
-   return TimeToString(italianNow, TIME_DATE);
-}
-
-//+------------------------------------------------------------------+
-//| Logica di aggiornamento centralizzata                            |
-//+------------------------------------------------------------------+
-void UpdateAll()
-{
-   int oraIT = GetItalianHour();
-   string sessionName = GetSessionName(oraIT);
-
-   // Aggiorna colore sfondo
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, GetSessionColor(oraIT));
-
-   // Aggiorna etichetta
-   UpdateSessionLabel(sessionName, oraIT);
-
-   // Ridisegna linee se cambio giorno (basato sulla data italiana)
-   // Disegna solo se abbiamo un offset server-GMT valido
-   if(g_serverGmtDiffValid)
-   {
-      string currentDate = GetItalianDateStr();
-      if(currentDate != g_lastItalianDate)
-      {
-         DrawTodaySessionLines();
-         g_lastItalianDate = currentDate;
-      }
-   }
-
-   // Log cambio sessione
-   if(sessionName != g_lastSessionName)
-   {
-      Print("[SessionIndicator] Cambio sessione: ", g_lastSessionName, " -> ", sessionName,
-            "  (Ora IT: ", oraIT, ":00, DST: ", (GetItalianGmtOffset(TimeGMT()) == 2 ? "CEST" : "CET"), ")");
-      g_lastSessionName = sessionName;
-   }
-
-   ChartRedraw(0);
-}
-
-//+------------------------------------------------------------------+
-//| Timer event - aggiornamento periodico                            |
+//| Timer event                                                      |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   UpdateAll();
+   if(g_serverGmtDiffValid)
+   {
+      DrawAllSessions();
+      ChartRedraw(0);
+   }
 }
 
 //+------------------------------------------------------------------+
-//| Tick event - aggiornamento ad ogni tick                          |
+//| Tick event                                                       |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -381,15 +421,25 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   // Cache server-GMT offset ad ogni tick (TimeCurrent e' fresco qui)
+   // Cache server-GMT offset
    g_cachedServerGmtDiff = (int)(TimeCurrent() - TimeGMT());
    if(!g_serverGmtDiffValid)
    {
       g_serverGmtDiffValid = true;
-      g_lastItalianDate = "";  // Forza ridisegno linee al primo tick
+      DrawAllSessions();
+      ChartRedraw(0);
+      g_lastDrawnBars = rates_total;
+      return(rates_total);
    }
 
-   UpdateAll();
+   // Ridisegna se nuove barre
+   if(rates_total != g_lastDrawnBars)
+   {
+      DrawAllSessions();
+      ChartRedraw(0);
+      g_lastDrawnBars = rates_total;
+   }
+
    return(rates_total);
 }
 //+------------------------------------------------------------------+
