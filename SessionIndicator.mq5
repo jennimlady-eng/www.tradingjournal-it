@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                          SessionIndicator.mq5    |
-//|   Indicatore sessioni di trading v3.1                            |
+//|   Indicatore sessioni di trading v3.2                            |
 //|   Rettangoli: London, New York                                   |
-//|   Tabella FOREX Session compatta in alto a destra                |
+//|   Tabella FOREX Session compatta in alto a SINISTRA              |
 //|   Linea verticale rosso fuoco al cambio ora legale italiana      |
-//|   Funziona su tutti i simboli e timeframe                        |
+//|   Auto-applica su tutti i grafici con simboli consentiti         |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "3.10"
+#property version     "3.20"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -45,20 +45,21 @@ input int      ManualGmtOffset     = 1;                   // Offset manuale
 input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
 
 //--- Costanti ---
-#define NUM_SESS 7
+#define NUM_SESS     7
+#define GV_MASTER    "SI_MasterChartID"
 
-// Layout tabella compatta (CORNER_RIGHT_UPPER)
+// Layout tabella compatta (CORNER_LEFT_UPPER)
 #define TBL_MARGIN   8
-#define TBL_W        340
-#define TBL_X        (TBL_MARGIN + TBL_W)
+#define TBL_W        330
 #define TBL_TITLE_H  18
 #define TBL_HDR_H    15
 #define TBL_ROW_H    15
-#define COL_S        6
-#define COL_D        70
-#define COL_T1       178
-#define COL_T2       245
-#define COL_ST       305
+#define COL_SESS     6
+#define COL_DST      68
+#define COL_START    140
+#define COL_END      205
+#define COL_STATUS   265
+#define COL_STATUS_W 58
 
 //--- Variabili globali ---
 string g_prefix;
@@ -67,6 +68,8 @@ bool   g_diffOk     = false;
 int    g_lastBars   = 0;
 bool   g_tblOk      = false;
 bool   g_rectsDrawn = false;
+bool   g_isMaster   = false;
+datetime g_lastScan = 0;
 
 //--- Dati sessioni per tabella ---
 string g_sName[NUM_SESS];
@@ -91,9 +94,9 @@ void InitSessData()
 }
 
 //+------------------------------------------------------------------+
-//| Controlla se il simbolo e' nella lista consentita                |
+//| Controlla se un simbolo e' nella lista consentita                |
 //+------------------------------------------------------------------+
-bool IsSymbolAllowed()
+bool IsSymbolInList(string sym)
 {
    if(AllowedSymbols == "") return true;
    string parts[];
@@ -102,9 +105,52 @@ bool IsSymbolAllowed()
    {
       StringTrimLeft(parts[i]);
       StringTrimRight(parts[i]);
-      if(parts[i] == _Symbol) return true;
+      if(StringFind(sym, parts[i]) >= 0) return true;
    }
    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Auto-applica indicatore su tutti i grafici aperti                |
+//+------------------------------------------------------------------+
+void ScanAndApplyToCharts()
+{
+   long cid = ChartFirst();
+   while(cid >= 0)
+   {
+      if(cid != ChartID())
+      {
+         string sym = ChartSymbol(cid);
+         if(IsSymbolInList(sym))
+         {
+            bool found = false;
+            int total = ChartIndicatorsTotal(cid, 0);
+            for(int j = 0; j < total; j++)
+            {
+               string indName = ChartIndicatorName(cid, 0, j);
+               if(StringFind(indName, "SessionIndicator") >= 0)
+               { found = true; break; }
+            }
+            if(!found)
+            {
+               int h = iCustom(sym, ChartPeriod(cid), "SessionIndicator",
+                  _sep1_, LondonOpenIT, LondonCloseIT, NewYorkOpenIT, NewYorkCloseIT,
+                  ColorLondon, ColorNewYork, BorderLondon, BorderNewYork,
+                  LblColorLondon, LblColorNewYork, LabelFontSize,
+                  _sep2_, ShowDSTLine, DSTLineColor, DSTLineWidth, DSTLineStyle,
+                  _sep3_, ShowTable,
+                  _sep4_, DaysToShow, AutoDST, ManualGmtOffset, AllowedSymbols);
+               if(h != INVALID_HANDLE)
+               {
+                  ChartIndicatorAdd(cid, 0, h);
+                  Print("SessionIndicator auto-applicato su ", sym);
+               }
+            }
+         }
+      }
+      cid = ChartNext(cid);
+   }
+   g_lastScan = TimeCurrent();
 }
 
 //+------------------------------------------------------------------+
@@ -438,7 +484,7 @@ void MakePanel(string name, int x, int y, int w, int h, color bg)
       return;
    }
    ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
    ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
@@ -459,7 +505,7 @@ void MakeLabel(string name, int x, int y, string text, color clr,
    if(ObjectFind(0, name) < 0)
    {
       ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
       ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
       ObjectSetString(0, name, OBJPROP_FONT, font);
@@ -473,7 +519,7 @@ void MakeLabel(string name, int x, int y, string text, color clr,
 }
 
 //+------------------------------------------------------------------+
-//| Crea la struttura della tabella (compatta)                       |
+//| Crea la struttura della tabella (compatta, angolo sinistro)      |
 //+------------------------------------------------------------------+
 void CreateTable()
 {
@@ -487,33 +533,32 @@ void CreateTable()
 
    int y = TBL_MARGIN;
 
-   MakePanel(g_prefix+"TB", TBL_X, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(g_prefix+"TT", TBL_X - TBL_W/2, y + 2, "FOREX Session", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
+   MakePanel(g_prefix+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
+   MakeLabel(g_prefix+"TT", TBL_MARGIN + TBL_W/2, y + 2, "FOREX Session", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
    y += TBL_TITLE_H;
 
-   MakePanel(g_prefix+"HB", TBL_X, y, TBL_W, TBL_HDR_H, cHdr);
+   MakePanel(g_prefix+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
    int hy = y + 2;
-   MakeLabel(g_prefix+"H0", TBL_X - COL_S,  hy, "Session",  cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H1", TBL_X - COL_D,  hy, "DST",      cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H2", TBL_X - COL_T1, hy, "Start",    cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H3", TBL_X - COL_T2, hy, "End",      cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H4", TBL_X - COL_ST, hy, "Status",   cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 7, "Arial Bold");
    y += TBL_HDR_H;
 
    for(int i = 0; i < NUM_SESS; i++)
    {
       color rBg = (i % 2 == 0) ? cRowE : cRowO;
       string si = IntegerToString(i);
-      MakePanel(g_prefix+"RB_"+si, TBL_X, y, TBL_W, TBL_ROW_H, rBg);
+      MakePanel(g_prefix+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
       int ry = y + 2;
-      MakeLabel(g_prefix+"RS_"+si, TBL_X - COL_S, ry, g_sName[i], clrWhite, 7);
-      MakeLabel(g_prefix+"RD_"+si,  TBL_X - COL_D,  ry, "", cTxt, 7);
-      MakeLabel(g_prefix+"RT1_"+si, TBL_X - COL_T1, ry, "", cTxt, 7);
-      MakeLabel(g_prefix+"RT2_"+si, TBL_X - COL_T2, ry, "", cTxt, 7);
+      MakeLabel(g_prefix+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[i], clrWhite, 7);
+      MakeLabel(g_prefix+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 7);
+      MakeLabel(g_prefix+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 7);
+      MakeLabel(g_prefix+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 7);
 
-      int stW = TBL_W - COL_ST;
-      MakePanel(g_prefix+"SB_"+si, TBL_X - COL_ST, ry - 1, stW, TBL_ROW_H - 2, C'178,34,34');
-      MakeLabel(g_prefix+"SS_"+si, TBL_X - COL_ST - stW/2, ry, "Closed", clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
+      MakePanel(g_prefix+"SB_"+si, TBL_MARGIN + COL_STATUS, ry - 1, COL_STATUS_W, TBL_ROW_H - 2, C'178,34,34');
+      MakeLabel(g_prefix+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
       y += TBL_ROW_H;
    }
    g_tblOk = true;
@@ -605,7 +650,7 @@ int OnInit()
    long chartId = ChartID();
    g_prefix = "SI" + IntegerToString(chartId) + "_";
 
-   if(!IsSymbolAllowed())
+   if(!IsSymbolInList(_Symbol))
    {
       Print("SessionIndicator: simbolo ", _Symbol, " non nella lista consentita");
       return(INIT_FAILED);
@@ -613,6 +658,15 @@ int OnInit()
 
    InitSessData();
    EventSetTimer(1);
+
+   double masterVal = 0;
+   if(!GlobalVariableGet(GV_MASTER, masterVal) || masterVal == 0)
+   {
+      GlobalVariableSet(GV_MASTER, (double)chartId);
+      g_isMaster = true;
+      ScanAndApplyToCharts();
+   }
+
    return(INIT_SUCCEEDED);
 }
 
@@ -623,6 +677,10 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    Cleanup();
+
+   if(g_isMaster)
+      GlobalVariableDel(GV_MASTER);
+
    ChartRedraw(0);
 }
 
@@ -654,6 +712,22 @@ void OnTimer()
       if(!g_tblOk) CreateTable();
       UpdateTable();
    }
+
+   // Master: ogni 10 sec controlla nuovi grafici aperti
+   if(g_isMaster && TimeCurrent() - g_lastScan > 10)
+      ScanAndApplyToCharts();
+
+   // Se il master non esiste piu, diventa master
+   if(!g_isMaster)
+   {
+      double v = 0;
+      if(!GlobalVariableGet(GV_MASTER, v) || v == 0)
+      {
+         GlobalVariableSet(GV_MASTER, (double)ChartID());
+         g_isMaster = true;
+      }
+   }
+
    ChartRedraw(0);
 }
 
