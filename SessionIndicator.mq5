@@ -111,7 +111,7 @@ int LastSundayOfMonth(int year, int month)
 }
 
 //+------------------------------------------------------------------+
-//| Primo giorno della settimana del 1° del mese (0=Dom)             |
+//| Primo giorno della settimana del 1 del mese (0=Dom)              |
 //+------------------------------------------------------------------+
 int DowOf1st(int year, int month)
 {
@@ -155,7 +155,7 @@ bool IsItalianDST(datetime gmtTime)
 bool IsEuDST(datetime gmtTime) { return IsItalianDST(gmtTime); }
 
 //+------------------------------------------------------------------+
-//| DST USA - 2a dom. marzo 07:00 UTC → 1a dom. novembre 06:00 UTC  |
+//| DST USA - 2a dom. marzo 07:00 UTC -> 1a dom. novembre 06:00 UTC |
 //+------------------------------------------------------------------+
 bool IsUsDST(datetime gmtTime)
 {
@@ -170,7 +170,7 @@ bool IsUsDST(datetime gmtTime)
 }
 
 //+------------------------------------------------------------------+
-//| DST Australia - 1a dom. ottobre → 1a dom. aprile                 |
+//| DST Australia - 1a dom. ottobre -> 1a dom. aprile                |
 //+------------------------------------------------------------------+
 bool IsAuDST(datetime gmtTime)
 {
@@ -218,7 +218,7 @@ int GetItGmtOffset(datetime gmtTime)
 }
 
 //+------------------------------------------------------------------+
-//| Ora italiana → server time per un dato giorno                    |
+//| Ora italiana -> server time per un dato giorno                   |
 //+------------------------------------------------------------------+
 datetime ItHourToSrv(int itHour, datetime srvMidnight)
 {
@@ -238,23 +238,20 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
 {
    hi = 0;
    lo = DBL_MAX;
-   int b1 = iBarShift(_Symbol, PERIOD_CURRENT, t1, false);
-   int b2 = iBarShift(_Symbol, PERIOD_CURRENT, t2, false);
-   if(b1 < 0) b1 = 0;
-   if(b2 < 0) b2 = 0;
-   int fr = MathMin(b1, b2), to = MathMax(b1, b2);
-   if(to - fr > 500) to = fr + 500;
 
    double hs[], ls[];
-   int ch = CopyHigh(_Symbol, PERIOD_CURRENT, fr, to - fr + 1, hs);
-   int cl = CopyLow(_Symbol, PERIOD_CURRENT, fr, to - fr + 1, ls);
+   int ch = CopyHigh(_Symbol, PERIOD_CURRENT, t1, t2, hs);
+   int cl = CopyLow(_Symbol, PERIOD_CURRENT, t1, t2, ls);
    if(ch <= 0 || cl <= 0)
    {
-      hi = iHigh(_Symbol, PERIOD_CURRENT, fr);
-      lo = iLow(_Symbol, PERIOD_CURRENT, fr);
+      double fh[1], fl[1];
+      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fh) > 0) hi = fh[0];
+      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl) > 0)  lo = fl[0];
+      if(hi <= 0) hi = 1.0;
+      if(lo <= 0 || lo >= DBL_MAX) lo = hi * 0.999;
       return;
    }
-   int cnt = MathMin(ch, cl);
+   int cnt = (int)MathMin(ch, cl);
    for(int i = 0; i < cnt; i++)
    {
       if(hs[i] > hi) hi = hs[i];
@@ -262,8 +259,11 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
    }
    if(hi <= 0 || lo >= DBL_MAX)
    {
-      hi = iHigh(_Symbol, PERIOD_CURRENT, 0);
-      lo = iLow(_Symbol, PERIOD_CURRENT, 0);
+      double fh2[1], fl2[1];
+      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fh2) > 0) hi = fh2[0];
+      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl2) > 0)  lo = fl2[0];
+      if(hi <= 0) hi = 1.0;
+      if(lo <= 0 || lo >= DBL_MAX) lo = hi * 0.999;
    }
 }
 
@@ -486,7 +486,7 @@ void CreateTable()
 
    // Titolo
    MakePanel(PREFIX+"TB", TBL_X, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(PREFIX+"TT", TBL_X - TBL_W/2, y + 4, "FOREX Session", clrWhite, 11, "Arial Bold", ANCHOR_CENTER_UPPER);
+   MakeLabel(PREFIX+"TT", TBL_X - TBL_W/2, y + 4, "FOREX Session", clrWhite, 11, "Arial Bold", ANCHOR_UPPER);
    y += TBL_TITLE_H;
 
    // Header
@@ -517,7 +517,7 @@ void CreateTable()
       // Status background + text
       int stW = TBL_W - COL_ST;
       MakePanel(PREFIX+"SB_"+si, TBL_X - COL_ST, ry - 2, stW, TBL_ROW_H - 4, C'178,34,34');
-      MakeLabel(PREFIX+"SS_"+si, TBL_X - COL_ST - stW/2, ry, "Closed", clrWhite, 9, "Arial Bold", ANCHOR_CENTER_UPPER);
+      MakeLabel(PREFIX+"SS_"+si, TBL_X - COL_ST - stW/2, ry, "Closed", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
 
       y += TBL_ROW_H;
    }
@@ -568,7 +568,7 @@ void UpdateTable()
       string sStr = StringFormat("%02d:00", sH);
       string eStr = StringFormat("%02d:00", eH);
 
-      // Open/Closed — forex reopens Sunday evening (~22:00 UTC)
+      // Open/Closed - forex reopens Sunday evening (~22:00 UTC)
       bool isOpen = false;
       if(dow >= 1 && dow <= 5)
       {
@@ -596,7 +596,7 @@ void UpdateTable()
       // Status bg
       ObjectSetInteger(0, PREFIX+"SB_"+si, OBJPROP_BGCOLOR, stBg);
       ObjectSetInteger(0, PREFIX+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
-      MakeLabel(PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 9, "Arial Bold", ANCHOR_CENTER_UPPER);
+      MakeLabel(PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
    }
 }
 
