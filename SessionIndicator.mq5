@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                          SessionIndicator.mq5    |
-//|   Indicatore sessioni di trading v3                              |
+//|   Indicatore sessioni di trading v3.1                            |
 //|   Rettangoli: London, New York                                   |
-//|   Tabella FOREX Session in alto a destra                         |
+//|   Tabella FOREX Session compatta in alto a destra                |
 //|   Linea verticale rosso fuoco al cambio ora legale italiana      |
 //|   Funziona su tutti i simboli e timeframe                        |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "3.00"
+#property version     "3.10"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -18,19 +18,19 @@ input int      LondonOpenIT        = 10;                  // Londra apertura IT
 input int      LondonCloseIT       = 18;                  // Londra chiusura IT
 input int      NewYorkOpenIT       = 15;                  // New York apertura IT
 input int      NewYorkCloseIT      = 23;                  // New York chiusura IT
-input color    ColorLondon         = C'15,50,15';         // Riempimento Londra
-input color    ColorNewYork        = C'35,15,55';         // Riempimento New York
-input color    BorderLondon        = C'0,160,0';          // Bordo Londra
-input color    BorderNewYork       = C'120,80,200';       // Bordo New York
+input color    ColorLondon         = C'30,80,30';         // Riempimento Londra
+input color    ColorNewYork        = C'55,30,80';         // Riempimento New York
+input color    BorderLondon        = C'0,200,0';          // Bordo Londra
+input color    BorderNewYork       = C'140,90,220';       // Bordo New York
 input color    LblColorLondon      = clrLime;             // Etichetta Londra
-input color    LblColorNewYork     = C'180,130,255';      // Etichetta New York
-input int      LabelFontSize       = 10;                  // Font etichette
+input color    LblColorNewYork     = C'200,150,255';      // Etichetta New York
+input int      LabelFontSize       = 9;                   // Font etichette
 
 //--- Linea cambio ora legale ---
 input string   _sep2_              = "=== LINEA ORA LEGALE ===";
 input bool     ShowDSTLine         = true;                // Mostra linea DST
-input color    DSTLineColor        = clrRed;              // Rosso fuoco
-input int      DSTLineWidth        = 3;                   // Spessore
+input color    DSTLineColor        = C'255,30,0';         // Rosso fuoco
+input int      DSTLineWidth        = 2;                   // Spessore
 input ENUM_LINE_STYLE DSTLineStyle = STYLE_DASH;          // Tratteggiata
 
 //--- Tabella ---
@@ -42,34 +42,38 @@ input string   _sep4_              = "=== GENERALE ===";
 input int      DaysToShow          = 30;                  // Giorni rettangoli
 input bool     AutoDST             = true;                // DST automatica
 input int      ManualGmtOffset     = 1;                   // Offset manuale
+input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
 
 //--- Costanti ---
-#define PREFIX "SI_"
 #define NUM_SESS 7
 
-// Layout tabella (CORNER_RIGHT_UPPER)
-#define TBL_MARGIN   10
-#define TBL_W        460
+// Layout tabella compatta (CORNER_RIGHT_UPPER)
+#define TBL_MARGIN   8
+#define TBL_W        340
 #define TBL_X        (TBL_MARGIN + TBL_W)
-#define TBL_TITLE_H  24
-#define TBL_HDR_H    20
-#define TBL_ROW_H    20
-#define COL_S        8
-#define COL_D        85
-#define COL_T1       230
-#define COL_T2       320
-#define COL_ST       400
+#define TBL_TITLE_H  18
+#define TBL_HDR_H    15
+#define TBL_ROW_H    15
+#define COL_S        6
+#define COL_D        70
+#define COL_T1       178
+#define COL_T2       245
+#define COL_ST       305
 
 //--- Variabili globali ---
-int    g_srvDiff  = 0;
-bool   g_diffOk   = false;
-int    g_lastBars = 0;
-bool   g_tblOk    = false;
+string g_prefix;
+int    g_srvDiff    = 0;
+bool   g_diffOk     = false;
+int    g_lastBars   = 0;
+bool   g_tblOk      = false;
+bool   g_rectsDrawn = false;
 
 //--- Dati sessioni per tabella ---
 string g_sName[NUM_SESS];
-int    g_sWinS[NUM_SESS], g_sWinE[NUM_SESS];
-int    g_sDstS[NUM_SESS], g_sDstE[NUM_SESS];
+int    g_sWinS[NUM_SESS];
+int    g_sWinE[NUM_SESS];
+int    g_sDstS[NUM_SESS];
+int    g_sDstE[NUM_SESS];
 int    g_sDstType[NUM_SESS];
 
 //+------------------------------------------------------------------+
@@ -77,8 +81,6 @@ int    g_sDstType[NUM_SESS];
 //+------------------------------------------------------------------+
 void InitSessData()
 {
-   //             name        winS winE  dstS dstE  type
-   // type: 0=none, 1=EU, 2=US, 3=AU
    g_sName[0]="Asia";      g_sWinS[0]=22; g_sWinE[0]=7;  g_sDstS[0]=21; g_sDstE[0]=6;  g_sDstType[0]=3;
    g_sName[1]="Sydney";    g_sWinS[1]=22; g_sWinE[1]=6;  g_sDstS[1]=21; g_sDstE[1]=5;  g_sDstType[1]=3;
    g_sName[2]="Tokyo";     g_sWinS[2]=23; g_sWinE[2]=7;  g_sDstS[2]=23; g_sDstE[2]=7;  g_sDstType[2]=0;
@@ -86,6 +88,23 @@ void InitSessData()
    g_sName[4]="Europe";    g_sWinS[4]=7;  g_sWinE[4]=16; g_sDstS[4]=6;  g_sDstE[4]=15; g_sDstType[4]=1;
    g_sName[5]="London";    g_sWinS[5]=8;  g_sWinE[5]=16; g_sDstS[5]=7;  g_sDstE[5]=15; g_sDstType[5]=1;
    g_sName[6]="New York";  g_sWinS[6]=13; g_sWinE[6]=21; g_sDstS[6]=12; g_sDstE[6]=20; g_sDstType[6]=2;
+}
+
+//+------------------------------------------------------------------+
+//| Controlla se il simbolo e' nella lista consentita                |
+//+------------------------------------------------------------------+
+bool IsSymbolAllowed()
+{
+   if(AllowedSymbols == "") return true;
+   string parts[];
+   int n = StringSplit(AllowedSymbols, ',', parts);
+   for(int i = 0; i < n; i++)
+   {
+      StringTrimLeft(parts[i]);
+      StringTrimRight(parts[i]);
+      if(parts[i] == _Symbol) return true;
+   }
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -110,9 +129,6 @@ int LastSundayOfMonth(int year, int month)
    return lastDay - db;
 }
 
-//+------------------------------------------------------------------+
-//| Primo giorno della settimana del 1 del mese (0=Dom)              |
-//+------------------------------------------------------------------+
 int DowOf1st(int year, int month)
 {
    int m = month, y = year;
@@ -149,9 +165,6 @@ bool IsItalianDST(datetime gmtTime)
    return (gmtTime >= s && gmtTime < e);
 }
 
-//+------------------------------------------------------------------+
-//| DST europea (uguale all'italiana)                                |
-//+------------------------------------------------------------------+
 bool IsEuDST(datetime gmtTime) { return IsItalianDST(gmtTime); }
 
 //+------------------------------------------------------------------+
@@ -177,11 +190,9 @@ bool IsAuDST(datetime gmtTime)
    MqlDateTime dt;
    TimeToStruct(gmtTime, dt);
    int yr = dt.year, mo = dt.mon;
-
    if(mo >= 5 && mo <= 9) return false;
    if(mo >= 1 && mo <= 3) return true;
    if(mo >= 11) return true;
-
    if(mo == 4)
    {
       int d = FirstSundayOfMonth(yr, 4);
@@ -197,9 +208,6 @@ bool IsAuDST(datetime gmtTime)
    return false;
 }
 
-//+------------------------------------------------------------------+
-//| Verifica DST per tipo                                            |
-//+------------------------------------------------------------------+
 bool IsDstActive(int dstType, datetime gmtTime)
 {
    if(dstType == 1) return IsEuDST(gmtTime);
@@ -208,9 +216,6 @@ bool IsDstActive(int dstType, datetime gmtTime)
    return false;
 }
 
-//+------------------------------------------------------------------+
-//| Offset italiano (+1 CET / +2 CEST)                              |
-//+------------------------------------------------------------------+
 int GetItGmtOffset(datetime gmtTime)
 {
    if(!AutoDST) return ManualGmtOffset;
@@ -238,32 +243,32 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
 {
    hi = 0;
    lo = DBL_MAX;
-
+   if(t1 > t2)
+   {
+      datetime tmp = t1;
+      t1 = t2;
+      t2 = tmp;
+   }
    double hs[], ls[];
    int ch = CopyHigh(_Symbol, PERIOD_CURRENT, t1, t2, hs);
    int cl = CopyLow(_Symbol, PERIOD_CURRENT, t1, t2, ls);
-   if(ch <= 0 || cl <= 0)
+   if(ch > 0 && cl > 0)
    {
-      double fh[1], fl[1];
-      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fh) > 0) hi = fh[0];
-      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl) > 0)  lo = fl[0];
-      if(hi <= 0) hi = 1.0;
-      if(lo <= 0 || lo >= DBL_MAX) lo = hi * 0.999;
-      return;
+      int cnt = (int)MathMin(ch, cl);
+      for(int i = 0; i < cnt; i++)
+      {
+         if(hs[i] > hi) hi = hs[i];
+         if(ls[i] < lo) lo = ls[i];
+      }
    }
-   int cnt = (int)MathMin(ch, cl);
-   for(int i = 0; i < cnt; i++)
+   if(hi <= 0 || lo >= DBL_MAX || lo <= 0)
    {
-      if(hs[i] > hi) hi = hs[i];
-      if(ls[i] < lo) lo = ls[i];
-   }
-   if(hi <= 0 || lo >= DBL_MAX)
-   {
-      double fh2[1], fl2[1];
-      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fh2) > 0) hi = fh2[0];
-      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl2) > 0)  lo = fl2[0];
-      if(hi <= 0) hi = 1.0;
-      if(lo <= 0 || lo >= DBL_MAX) lo = hi * 0.999;
+      double fb[1];
+      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fb) > 0) hi = fb[0];
+      else hi = 1.0;
+      double fl[1];
+      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl) > 0) lo = fl[0];
+      else lo = hi * 0.999;
    }
 }
 
@@ -273,23 +278,16 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
 void DrawRect(string tag, datetime t1, datetime t2,
               color fillClr, color borderClr, color lblClr, string lblText)
 {
+   if(t1 >= t2) return;
    double hi, lo;
    GetPriceRange(t1, t2, hi, lo);
    double rng = hi - lo;
-   if(rng <= 0) rng = hi * 0.001;
-   hi += rng * 0.02;
-   lo -= rng * 0.02;
+   if(rng <= 0) rng = hi * 0.002;
+   hi += rng * 0.03;
+   lo -= rng * 0.03;
 
-   // Rettangolo riempito (sfondo)
-   string rf = PREFIX + "RF_" + tag;
-   if(ObjectFind(0, rf) >= 0)
-   {
-      ObjectSetInteger(0, rf, OBJPROP_TIME, 0, t1);
-      ObjectSetDouble(0, rf, OBJPROP_PRICE, 0, hi);
-      ObjectSetInteger(0, rf, OBJPROP_TIME, 1, t2);
-      ObjectSetDouble(0, rf, OBJPROP_PRICE, 1, lo);
-   }
-   else
+   string rf = g_prefix + "F_" + tag;
+   if(ObjectFind(0, rf) < 0)
    {
       ObjectCreate(0, rf, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
       ObjectSetInteger(0, rf, OBJPROP_COLOR, fillClr);
@@ -298,45 +296,49 @@ void DrawRect(string tag, datetime t1, datetime t2,
       ObjectSetInteger(0, rf, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, rf, OBJPROP_HIDDEN, true);
    }
+   else
+   {
+      ObjectSetInteger(0, rf, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(0, rf, OBJPROP_PRICE, 0, hi);
+      ObjectSetInteger(0, rf, OBJPROP_TIME, 1, t2);
+      ObjectSetDouble(0, rf, OBJPROP_PRICE, 1, lo);
+   }
 
-   // Rettangolo bordo (davanti)
-   string rb = PREFIX + "RB_" + tag;
-   if(ObjectFind(0, rb) >= 0)
+   string rb = g_prefix + "B_" + tag;
+   if(ObjectFind(0, rb) < 0)
+   {
+      ObjectCreate(0, rb, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
+      ObjectSetInteger(0, rb, OBJPROP_COLOR, borderClr);
+      ObjectSetInteger(0, rb, OBJPROP_FILL, false);
+      ObjectSetInteger(0, rb, OBJPROP_BACK, false);
+      ObjectSetInteger(0, rb, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, rb, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, rb, OBJPROP_WIDTH, 2);
+   }
+   else
    {
       ObjectSetInteger(0, rb, OBJPROP_TIME, 0, t1);
       ObjectSetDouble(0, rb, OBJPROP_PRICE, 0, hi);
       ObjectSetInteger(0, rb, OBJPROP_TIME, 1, t2);
       ObjectSetDouble(0, rb, OBJPROP_PRICE, 1, lo);
    }
-   else
-   {
-      ObjectCreate(0, rb, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
-      ObjectSetInteger(0, rb, OBJPROP_COLOR, borderClr);
-      ObjectSetInteger(0, rb, OBJPROP_FILL, false);
-      ObjectSetInteger(0, rb, OBJPROP_BACK, true);
-      ObjectSetInteger(0, rb, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, rb, OBJPROP_HIDDEN, true);
-      ObjectSetInteger(0, rb, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, rb, OBJPROP_STYLE, STYLE_DOT);
-   }
 
-   // Etichetta
-   string ln = PREFIX + "LB_" + tag;
-   if(ObjectFind(0, ln) >= 0)
-   {
-      ObjectSetInteger(0, ln, OBJPROP_TIME, 0, t1);
-      ObjectSetDouble(0, ln, OBJPROP_PRICE, 0, hi);
-   }
-   else
+   string ln = g_prefix + "L_" + tag;
+   if(ObjectFind(0, ln) < 0)
    {
       ObjectCreate(0, ln, OBJ_TEXT, 0, t1, hi);
-      ObjectSetString(0, ln, OBJPROP_TEXT, lblText);
+      ObjectSetString(0, ln, OBJPROP_TEXT, " " + lblText);
       ObjectSetString(0, ln, OBJPROP_FONT, "Arial Bold");
       ObjectSetInteger(0, ln, OBJPROP_FONTSIZE, LabelFontSize);
       ObjectSetInteger(0, ln, OBJPROP_COLOR, lblClr);
       ObjectSetInteger(0, ln, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
       ObjectSetInteger(0, ln, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, ln, OBJPROP_HIDDEN, true);
+   }
+   else
+   {
+      ObjectSetInteger(0, ln, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(0, ln, OBJPROP_PRICE, 0, hi);
    }
 }
 
@@ -347,11 +349,13 @@ void DrawDay(datetime srvMid, string sfx)
 {
    datetime ldnO = ItHourToSrv(LondonOpenIT, srvMid);
    datetime ldnC = ItHourToSrv(LondonCloseIT, srvMid);
-   DrawRect("LDN_" + sfx, ldnO, ldnC, ColorLondon, BorderLondon, LblColorLondon, "London");
+   if(ldnO < ldnC)
+      DrawRect("LDN_" + sfx, ldnO, ldnC, ColorLondon, BorderLondon, LblColorLondon, "London");
 
    datetime nyO = ItHourToSrv(NewYorkOpenIT, srvMid);
    datetime nyC = ItHourToSrv(NewYorkCloseIT, srvMid);
-   DrawRect("NY_" + sfx, nyO, nyC, ColorNewYork, BorderNewYork, LblColorNewYork, "New York");
+   if(nyO < nyC)
+      DrawRect("NY_" + sfx, nyO, nyC, ColorNewYork, BorderNewYork, LblColorNewYork, "New York");
 }
 
 //+------------------------------------------------------------------+
@@ -360,17 +364,16 @@ void DrawDay(datetime srvMid, string sfx)
 void DrawDSTLines()
 {
    if(!ShowDSTLine || !g_diffOk) return;
-
    datetime gmt = TimeGMT();
    MqlDateTime dt;
    TimeToStruct(gmt, dt);
    int yr = dt.year;
 
-   for(int y = yr - 1; y <= yr; y++)
+   for(int y = yr - 1; y <= yr + 1; y++)
    {
       int ms = LastSundayOfMonth(y, 3);
       datetime gsS = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 3, ms));
-      string nS = PREFIX + "DS_" + IntegerToString(y);
+      string nS = g_prefix + "DS_" + IntegerToString(y);
       if(ObjectFind(0, nS) < 0)
       {
          ObjectCreate(0, nS, OBJ_VLINE, 0, gsS + g_srvDiff, 0);
@@ -379,13 +382,13 @@ void DrawDSTLines()
          ObjectSetInteger(0, nS, OBJPROP_STYLE, DSTLineStyle);
          ObjectSetInteger(0, nS, OBJPROP_BACK, false);
          ObjectSetInteger(0, nS, OBJPROP_SELECTABLE, false);
-         ObjectSetInteger(0, nS, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, nS, OBJPROP_HIDDEN, false);
          ObjectSetString(0, nS, OBJPROP_TOOLTIP, "Inizio CEST " + IntegerToString(y));
       }
 
       int os = LastSundayOfMonth(y, 10);
       datetime gsE = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 10, os));
-      string nE = PREFIX + "DE_" + IntegerToString(y);
+      string nE = g_prefix + "DE_" + IntegerToString(y);
       if(ObjectFind(0, nE) < 0)
       {
          ObjectCreate(0, nE, OBJ_VLINE, 0, gsE + g_srvDiff, 0);
@@ -394,7 +397,7 @@ void DrawDSTLines()
          ObjectSetInteger(0, nE, OBJPROP_STYLE, DSTLineStyle);
          ObjectSetInteger(0, nE, OBJPROP_BACK, false);
          ObjectSetInteger(0, nE, OBJPROP_SELECTABLE, false);
-         ObjectSetInteger(0, nE, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, nE, OBJPROP_HIDDEN, false);
          ObjectSetString(0, nE, OBJPROP_TOOLTIP, "Fine CEST " + IntegerToString(y));
       }
    }
@@ -406,7 +409,6 @@ void DrawDSTLines()
 void DrawAllRects()
 {
    if(!g_diffOk) return;
-
    MqlDateTime ds;
    TimeToStruct(TimeCurrent(), ds);
    ds.hour = 0; ds.min = 0; ds.sec = 0;
@@ -421,6 +423,7 @@ void DrawAllRects()
       DrawDay(mid, TimeToString(mid, TIME_DATE));
    }
    DrawDSTLines();
+   g_rectsDrawn = true;
 }
 
 //+------------------------------------------------------------------+
@@ -451,7 +454,7 @@ void MakePanel(string name, int x, int y, int w, int h, color bg)
 //| Helper: crea/aggiorna etichetta testo                            |
 //+------------------------------------------------------------------+
 void MakeLabel(string name, int x, int y, string text, color clr,
-               int fsize=9, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_UPPER)
+               int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_UPPER)
 {
    if(ObjectFind(0, name) < 0)
    {
@@ -470,7 +473,7 @@ void MakeLabel(string name, int x, int y, string text, color clr,
 }
 
 //+------------------------------------------------------------------+
-//| Crea la struttura della tabella                                  |
+//| Crea la struttura della tabella (compatta)                       |
 //+------------------------------------------------------------------+
 void CreateTable()
 {
@@ -480,48 +483,39 @@ void CreateTable()
    color cHdr    = C'52,73,94';
    color cRowE   = C'44,47,51';
    color cRowO   = C'55,58,62';
-   color cTxt    = C'220,220,220';
+   color cTxt    = C'200,200,200';
 
    int y = TBL_MARGIN;
 
-   // Titolo
-   MakePanel(PREFIX+"TB", TBL_X, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(PREFIX+"TT", TBL_X - TBL_W/2, y + 4, "FOREX Session", clrWhite, 11, "Arial Bold", ANCHOR_UPPER);
+   MakePanel(g_prefix+"TB", TBL_X, y, TBL_W, TBL_TITLE_H, cTitle);
+   MakeLabel(g_prefix+"TT", TBL_X - TBL_W/2, y + 2, "FOREX Session", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
    y += TBL_TITLE_H;
 
-   // Header
-   MakePanel(PREFIX+"HB", TBL_X, y, TBL_W, TBL_HDR_H, cHdr);
-   int hy = y + 3;
-   MakeLabel(PREFIX+"H0", TBL_X - COL_S,  hy, "Session",         cTxt, 9, "Arial Bold");
-   MakeLabel(PREFIX+"H1", TBL_X - COL_D,  hy, "Daylight Saving", cTxt, 9, "Arial Bold");
-   MakeLabel(PREFIX+"H2", TBL_X - COL_T1, hy, "Start(UTC)",      cTxt, 9, "Arial Bold");
-   MakeLabel(PREFIX+"H3", TBL_X - COL_T2, hy, "End(UTC)",        cTxt, 9, "Arial Bold");
-   MakeLabel(PREFIX+"H4", TBL_X - COL_ST, hy, "Status",          cTxt, 9, "Arial Bold");
+   MakePanel(g_prefix+"HB", TBL_X, y, TBL_W, TBL_HDR_H, cHdr);
+   int hy = y + 2;
+   MakeLabel(g_prefix+"H0", TBL_X - COL_S,  hy, "Session",  cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H1", TBL_X - COL_D,  hy, "DST",      cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H2", TBL_X - COL_T1, hy, "Start",    cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H3", TBL_X - COL_T2, hy, "End",      cTxt, 7, "Arial Bold");
+   MakeLabel(g_prefix+"H4", TBL_X - COL_ST, hy, "Status",   cTxt, 7, "Arial Bold");
    y += TBL_HDR_H;
 
-   // Righe dati
    for(int i = 0; i < NUM_SESS; i++)
    {
       color rBg = (i % 2 == 0) ? cRowE : cRowO;
       string si = IntegerToString(i);
-      MakePanel(PREFIX+"RB_"+si, TBL_X, y, TBL_W, TBL_ROW_H, rBg);
+      MakePanel(g_prefix+"RB_"+si, TBL_X, y, TBL_W, TBL_ROW_H, rBg);
+      int ry = y + 2;
+      MakeLabel(g_prefix+"RS_"+si, TBL_X - COL_S, ry, g_sName[i], clrWhite, 7);
+      MakeLabel(g_prefix+"RD_"+si,  TBL_X - COL_D,  ry, "", cTxt, 7);
+      MakeLabel(g_prefix+"RT1_"+si, TBL_X - COL_T1, ry, "", cTxt, 7);
+      MakeLabel(g_prefix+"RT2_"+si, TBL_X - COL_T2, ry, "", cTxt, 7);
 
-      int ry = y + 3;
-      MakeLabel(PREFIX+"RS_"+si, TBL_X - COL_S, ry, g_sName[i], clrWhite, 9);
-
-      // Colonne dinamiche (placeholder)
-      MakeLabel(PREFIX+"RD_"+si,  TBL_X - COL_D,  ry, "", cTxt, 9);
-      MakeLabel(PREFIX+"RT1_"+si, TBL_X - COL_T1, ry, "", cTxt, 9);
-      MakeLabel(PREFIX+"RT2_"+si, TBL_X - COL_T2, ry, "", cTxt, 9);
-
-      // Status background + text
       int stW = TBL_W - COL_ST;
-      MakePanel(PREFIX+"SB_"+si, TBL_X - COL_ST, ry - 2, stW, TBL_ROW_H - 4, C'178,34,34');
-      MakeLabel(PREFIX+"SS_"+si, TBL_X - COL_ST - stW/2, ry, "Closed", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
-
+      MakePanel(g_prefix+"SB_"+si, TBL_X - COL_ST, ry - 1, stW, TBL_ROW_H - 2, C'178,34,34');
+      MakeLabel(g_prefix+"SS_"+si, TBL_X - COL_ST - stW/2, ry, "Closed", clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
       y += TBL_ROW_H;
    }
-
    g_tblOk = true;
 }
 
@@ -545,26 +539,15 @@ void UpdateTable()
       int sH = dstOn ? g_sDstS[i] : g_sWinS[i];
       int eH = dstOn ? g_sDstE[i] : g_sWinE[i];
 
-      // DST status
       string dTxt;
       color  dClr;
       if(g_sDstType[i] == 0)
-      {
-         dTxt = "Not Observed";
-         dClr = C'128,128,128';
-      }
+      { dTxt = "No"; dClr = C'128,128,128'; }
       else if(dstOn)
-      {
-         dTxt = "Active";
-         dClr = C'255,165,0';
-      }
+      { dTxt = "ON"; dClr = C'255,165,0'; }
       else
-      {
-         dTxt = "Inactive";
-         dClr = C'100,149,237';
-      }
+      { dTxt = "OFF"; dClr = C'100,149,237'; }
 
-      // Orari
       string sStr = StringFormat("%02d:00", sH);
       string eStr = StringFormat("%02d:00", eH);
 
@@ -578,25 +561,20 @@ void UpdateTable()
             isOpen = (hUTC >= sH || hUTC < eH);
       }
       else if(dow == 0 && sH >= 20)
-      {
          isOpen = (hUTC >= sH);
-      }
       else if(dow == 6 && sH > eH)
-      {
          isOpen = (hUTC < eH);
-      }
 
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
 
-      MakeLabel(PREFIX+"RD_"+si,  0, 0, dTxt, dClr, 9);
-      MakeLabel(PREFIX+"RT1_"+si, 0, 0, sStr, C'220,220,220', 9);
-      MakeLabel(PREFIX+"RT2_"+si, 0, 0, eStr, C'220,220,220', 9);
+      MakeLabel(g_prefix+"RD_"+si,  0, 0, dTxt, dClr, 7);
+      MakeLabel(g_prefix+"RT1_"+si, 0, 0, sStr, C'200,200,200', 7);
+      MakeLabel(g_prefix+"RT2_"+si, 0, 0, eStr, C'200,200,200', 7);
 
-      // Status bg
-      ObjectSetInteger(0, PREFIX+"SB_"+si, OBJPROP_BGCOLOR, stBg);
-      ObjectSetInteger(0, PREFIX+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
-      MakeLabel(PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
+      ObjectSetInteger(0, g_prefix+"SB_"+si, OBJPROP_BGCOLOR, stBg);
+      ObjectSetInteger(0, g_prefix+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
+      MakeLabel(g_prefix+"SS_"+si, 0, 0, stTx, clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
    }
 }
 
@@ -609,7 +587,7 @@ void Cleanup()
    for(int i = total - 1; i >= 0; i--)
    {
       string name = ObjectName(0, i);
-      if(StringFind(name, PREFIX) == 0)
+      if(StringFind(name, g_prefix) == 0)
          ObjectDelete(0, name);
    }
 }
@@ -619,6 +597,15 @@ void Cleanup()
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   long chartId = ChartID();
+   g_prefix = "SI" + IntegerToString(chartId) + "_";
+
+   if(!IsSymbolAllowed())
+   {
+      Print("SessionIndicator: simbolo ", _Symbol, " non nella lista consentita");
+      return(INIT_FAILED);
+   }
+
    InitSessData();
    EventSetTimer(1);
    return(INIT_SUCCEEDED);
@@ -635,7 +622,7 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Timer - aggiorna tabella ogni secondo                            |
+//| Timer - aggiorna tabella e ridisegna se necessario               |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -651,6 +638,12 @@ void OnTimer()
    }
    if(!g_diffOk) return;
 
+   if(!g_rectsDrawn)
+   {
+      DrawAllRects();
+      ChartRedraw(0);
+   }
+
    if(ShowTable)
    {
       if(!g_tblOk) CreateTable();
@@ -660,7 +653,7 @@ void OnTimer()
 }
 
 //+------------------------------------------------------------------+
-//| OnCalculate - disegna rettangoli ad ogni tick / nuova barra      |
+//| OnCalculate - disegna rettangoli ad ogni nuova barra             |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -673,20 +666,17 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   g_srvDiff = (int)(TimeCurrent() - TimeGMT());
    if(!g_diffOk)
    {
+      g_srvDiff = (int)(TimeCurrent() - TimeGMT());
       g_diffOk = true;
-      if(ShowTable) { CreateTable(); UpdateTable(); }
-      DrawAllRects();
-      ChartRedraw(0);
-      g_lastBars = rates_total;
-      return(rates_total);
    }
 
-   if(rates_total != g_lastBars)
+   if(!g_rectsDrawn || rates_total != g_lastBars)
    {
       DrawAllRects();
+      if(ShowTable && !g_tblOk) CreateTable();
+      if(ShowTable) UpdateTable();
       ChartRedraw(0);
       g_lastBars = rates_total;
    }
