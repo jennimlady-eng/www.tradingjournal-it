@@ -185,13 +185,13 @@ bool IsAuDST(datetime gmtTime)
    if(mo == 4)
    {
       int d = FirstSundayOfMonth(yr, 4);
-      datetime e = StringToTime(StringFormat("%d.%02d.%02d 16:00", yr, 4, d));
+      datetime e = StringToTime(StringFormat("%d.%02d.%02d 16:00", yr, 4, d)) - 86400;
       return (gmtTime < e);
    }
    if(mo == 10)
    {
       int d = FirstSundayOfMonth(yr, 10);
-      datetime s = StringToTime(StringFormat("%d.%02d.%02d 16:00", yr, 10, d));
+      datetime s = StringToTime(StringFormat("%d.%02d.%02d 16:00", yr, 10, d)) - 86400;
       return (gmtTime >= s);
    }
    return false;
@@ -536,7 +536,7 @@ void UpdateTable()
    MqlDateTime dtG;
    TimeToStruct(gmt, dtG);
    int hUTC = dtG.hour;
-   bool weekend = (dtG.day_of_week == 0 || dtG.day_of_week == 6);
+   int dow = dtG.day_of_week;
 
    for(int i = 0; i < NUM_SESS; i++)
    {
@@ -568,14 +568,22 @@ void UpdateTable()
       string sStr = StringFormat("%02d:00", sH);
       string eStr = StringFormat("%02d:00", eH);
 
-      // Open/Closed
+      // Open/Closed — forex reopens Sunday evening (~22:00 UTC)
       bool isOpen = false;
-      if(!weekend)
+      if(dow >= 1 && dow <= 5)
       {
          if(sH < eH)
             isOpen = (hUTC >= sH && hUTC < eH);
          else
             isOpen = (hUTC >= sH || hUTC < eH);
+      }
+      else if(dow == 0 && sH >= 20)
+      {
+         isOpen = (hUTC >= sH);
+      }
+      else if(dow == 6 && sH > eH)
+      {
+         isOpen = (hUTC < eH);
       }
 
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
