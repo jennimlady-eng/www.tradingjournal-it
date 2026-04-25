@@ -530,22 +530,27 @@ void ProcessBreakEvenAllSymbols()
       bool beApplied=(ptype==POSITION_TYPE_BUY)?(curSL>=targetSL):(curSL>0.0&&curSL<=targetSL);
       if(beApplied){g_configs[cfgIdx].applied=true;continue;}
       double profPips=(ptype==POSITION_TYPE_BUY)?(bid-openP)/pipSize:(openP-ask)/pipSize;
-      // --- Nuova regola: orario passato + posizione in perdita => "dimentica" il BE
-      if(profPips < 0.0 && !TestAllowBEWithoutProfit)
-      {
-         g_configs[cfgIdx].stale = true;
-         PrintFormat("[BE] #%I64u orario %02d:%02d passato con posizione in SL (%.1f pips): BE DIMENTICATO. Scrivere una NUOVA ora nel config per riarmare.",
-                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips);
-         continue;
-      }
+      // --- Calcolo distanza SL per verifica 1:1 RR ---
+      double slDistancePips = 0.0;
+      if(curSL > 0.0)
+         slDistancePips = (ptype==POSITION_TYPE_BUY) ? (openP - curSL) / pipSize
+                                                     : (curSL - openP) / pipSize;
+      else
+         slDistancePips = DefaultSlPips;
       double stopsLevelPips = (SymbolInfoInteger(sym,SYMBOL_TRADE_STOPS_LEVEL)*
                                SymbolInfoDouble(sym,SYMBOL_POINT)) / pipSize;
-      double minProfitPips  = MathMax(2.0, stopsLevelPips + LockInPips + 1.0);
-      if(!TestAllowBEWithoutProfit && profPips<=minProfitPips)
+      double minProfitPips = MathMax(slDistancePips, stopsLevelPips + LockInPips + 1.0);
+      if(profPips < minProfitPips)
       {
-         if(DebugBELogs)
-            PrintFormat("[BE] #%I64u non abbastanza in profitto (%.1f pips, serve >%.1f, stops_level=%.1f pips), attendo.",
-                        ticket,profPips,minProfitPips,stopsLevelPips);
+         if(profPips < 0.0)
+         {
+            g_configs[cfgIdx].stale = true;
+            PrintFormat("[BE] #%I64u orario %02d:%02d passato in perdita (%.1f pips): BE DIMENTICATO.",
+                        ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips);
+         }
+         else if(DebugBELogs)
+            PrintFormat("[BE] #%I64u profitto %.1f pips < 1:1 RR (serve >=%.1f pips SL), BE non applicato.",
+                        ticket, profPips, minProfitPips);
          continue;
       }
       bool ok=ApplyBreakEven(ticket,sym,ptype,openP,curSL,curTP,bid,ask,digits,pipSize,
