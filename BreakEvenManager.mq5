@@ -9,13 +9,13 @@
 #property strict
 #property description "BE da file + apertura rapida N posizioni + tab Mercato + selettore simboli + prezzo live."
 #include <Trade\Trade.mqh>
-input string ConfigFile              = "be_config.txt";
+string ConfigFile              = "be_config.txt";
 input double LockInPips              = 0.0;
 long   MagicFilter             = -1;
 bool   AllowBuyPositions       = true;
 bool   AllowSellPositions      = true;
 double MaxSpreadPips           = 999.0;
-input bool   TestAllowBEWithoutProfit= false;
+bool   TestAllowBEWithoutProfit= false;
 input bool   DebugBELogs             = true;
 bool   AutoAddTicketsToConfig  = true;
 bool   AutoRemoveCanceledTickets = true;
