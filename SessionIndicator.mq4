@@ -50,7 +50,8 @@ input int      ManualGmtOffset     = 1;     // Offset GMT manuale (usato se Auto
 #define PREFIX_SI "SI_"
 
 //--- Variabili globali ---
-int    g_lastBarCount = 0;
+color  g_originalBg = clrBlack;
+string g_lastItalianDate = "";
 string g_lastSessionName = "";
 
 //+------------------------------------------------------------------+
@@ -206,7 +207,11 @@ void DrawSessionLine(datetime time, string name, color clr, string tooltip)
 
    string objName = PREFIX_SI + "VL_" + name + "_" + TimeToString(time, TIME_DATE);
 
-   if(ObjectFind(0, objName) >= 0) return;
+   if(ObjectFind(0, objName) >= 0)
+   {
+      ObjectSetInteger(0, objName, OBJPROP_TIME, 0, time);
+      return;
+   }
 
    ObjectCreate(0, objName, OBJ_VLINE, 0, time, 0);
    ObjectSetInteger(0, objName, OBJPROP_COLOR, clr);
@@ -227,19 +232,20 @@ datetime ItalianHourToServerTime(int italianHour)
    datetime gmtNow = TimeGMT();
    int offset = GetItalianGmtOffset(gmtNow);
 
-   // Calcola la mezzanotte GMT di oggi
-   MqlDateTime dtGmt;
-   TimeToStruct(gmtNow, dtGmt);
-   dtGmt.hour = 0;
-   dtGmt.min  = 0;
-   dtGmt.sec  = 0;
-   datetime midnightGmt = StructToTime(dtGmt);
+   // Calcola la mezzanotte italiana di oggi (in Italian time), poi converti in GMT
+   datetime italianNow = gmtNow + offset * 3600;
+   MqlDateTime dtIt;
+   TimeToStruct(italianNow, dtIt);
+   dtIt.hour = 0;
+   dtIt.min  = 0;
+   dtIt.sec  = 0;
+   datetime italianMidnight = StructToTime(dtIt);
 
    // Ora GMT corrispondente all'ora italiana desiderata
-   datetime targetGmt = midnightGmt + (italianHour - offset) * 3600;
+   datetime targetGmt = italianMidnight + (italianHour - offset) * 3600;
 
-   // Differenza server-GMT
-   int serverGmtDiff = (int)(TimeCurrent() - TimeGMT());
+   // Differenza server-GMT (usa TimeLocal per evitare stale TimeCurrent nei weekend)
+   int serverGmtDiff = (int)(TimeLocal() - TimeGMT());
 
    return targetGmt + serverGmtDiff;
 }
@@ -286,16 +292,11 @@ void CleanupObjects()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // Disegna subito le linee della giornata
-   DrawTodaySessionLines();
+   // Salva il colore di sfondo originale per ripristinarlo in OnDeinit
+   g_originalBg = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
 
-   // Aggiorna subito la sessione
-   int oraIT = GetItalianHour();
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, GetSessionColor(oraIT));
-   UpdateSessionLabel(GetSessionName(oraIT), oraIT);
-   g_lastSessionName = GetSessionName(oraIT);
-
-   ChartRedraw(0);
+   // Aggiorna tutto subito
+   UpdateAll();
 
    // Timer ogni 30 secondi per aggiornamento continuo
    EventSetTimer(30);
@@ -310,15 +311,26 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    CleanupObjects();
-   // Ripristina sfondo nero
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, clrBlack);
+   // Ripristina il colore di sfondo originale
+   ChartSetInteger(0, CHART_COLOR_BACKGROUND, g_originalBg);
    ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| Timer event - aggiornamento periodico                            |
+//| Ritorna la data italiana corrente come stringa "YYYY.MM.DD"      |
 //+------------------------------------------------------------------+
-void OnTimer()
+string GetItalianDateStr()
+{
+   datetime gmtNow = TimeGMT();
+   int offset = GetItalianGmtOffset(gmtNow);
+   datetime italianNow = gmtNow + offset * 3600;
+   return TimeToString(italianNow, TIME_DATE);
+}
+
+//+------------------------------------------------------------------+
+//| Logica di aggiornamento centralizzata                            |
+//+------------------------------------------------------------------+
+void UpdateAll()
 {
    int oraIT = GetItalianHour();
    string sessionName = GetSessionName(oraIT);
@@ -329,12 +341,12 @@ void OnTimer()
    // Aggiorna etichetta
    UpdateSessionLabel(sessionName, oraIT);
 
-   // Ridisegna linee se cambio giorno
-   int currentBars = Bars;
-   if(currentBars != g_lastBarCount)
+   // Ridisegna linee se cambio giorno (basato sulla data italiana)
+   string currentDate = GetItalianDateStr();
+   if(currentDate != g_lastItalianDate)
    {
       DrawTodaySessionLines();
-      g_lastBarCount = currentBars;
+      g_lastItalianDate = currentDate;
    }
 
    // Log cambio sessione
@@ -346,6 +358,14 @@ void OnTimer()
    }
 
    ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Timer event - aggiornamento periodico                            |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   UpdateAll();
 }
 
 //+------------------------------------------------------------------+
@@ -362,29 +382,7 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   int oraIT = GetItalianHour();
-   string sessionName = GetSessionName(oraIT);
-
-   // Aggiorna colore sfondo
-   ChartSetInteger(0, CHART_COLOR_BACKGROUND, GetSessionColor(oraIT));
-
-   // Aggiorna etichetta
-   UpdateSessionLabel(sessionName, oraIT);
-
-   // Linee verticali (solo se nuova barra)
-   if(rates_total != g_lastBarCount)
-   {
-      DrawTodaySessionLines();
-      g_lastBarCount = rates_total;
-   }
-
-   // Log cambio sessione
-   if(sessionName != g_lastSessionName)
-   {
-      Print("[SessionIndicator] Cambio sessione: ", g_lastSessionName, " -> ", sessionName);
-      g_lastSessionName = sessionName;
-   }
-
+   UpdateAll();
    return(rates_total);
 }
 //+------------------------------------------------------------------+
