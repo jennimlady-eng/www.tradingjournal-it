@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
-//|                                          SessionIndicator.mq4    |
+//|                                          SessionIndicator.mq5    |
 //|   Indicatore sessioni di trading con gestione ora legale IT      |
 //|   Sessioni: Asia (Tokyo), Londra, New York + Overlap             |
-//|                        Compatible with MetaTrader 4              |
+//|                        Compatible with MetaTrader 5              |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
 #property version     "1.00"
-#property strict
 #property indicator_chart_window
+#property indicator_plots 0
 
 //--- Input configurabili dall'utente ---
 input string   _sep1_              = "=== SESSIONI (ora italiana) ===";
@@ -61,7 +61,6 @@ bool   g_serverGmtDiffValid  = false;
 //+------------------------------------------------------------------+
 int LastSundayOfMonth(int year, int month)
 {
-   // Trova l'ultimo giorno del mese
    int lastDay = 31;
    if(month == 4 || month == 6 || month == 9 || month == 11) lastDay = 30;
    if(month == 2)
@@ -71,8 +70,7 @@ int LastSundayOfMonth(int year, int month)
          lastDay = 29;
    }
 
-   // Zeller's algorithm per il giorno della settimana
-   // 0=Sab, 1=Dom, 2=Lun, ..., 6=Ven
+   // Zeller's algorithm
    int q = lastDay;
    int m = month;
    int y = year;
@@ -83,7 +81,6 @@ int LastSundayOfMonth(int year, int month)
    if(h < 0) h += 7;
    // h: 0=Sab, 1=Dom, 2=Lun, 3=Mar, 4=Mer, 5=Gio, 6=Ven
 
-   // Calcola quanti giorni tornare indietro per trovare domenica
    int daysBack = (h == 1) ? 0 : (h == 0) ? 6 : h - 1;
    return lastDay - daysBack;
 }
@@ -101,12 +98,9 @@ bool IsItalianDST(datetime gmtTime)
 
    int year = dt.year;
 
-   // Ultima domenica di marzo (inizio CEST alle 01:00 UTC)
-   int marchSunday = LastSundayOfMonth(year, 3);
-   // Ultima domenica di ottobre (fine CEST alle 01:00 UTC)
+   int marchSunday   = LastSundayOfMonth(year, 3);
    int octoberSunday = LastSundayOfMonth(year, 10);
 
-   // Crea datetime per le transizioni
    datetime dstStart = StringToTime(StringFormat("%d.%02d.%02d 01:00", year, 3, marchSunday));
    datetime dstEnd   = StringToTime(StringFormat("%d.%02d.%02d 01:00", year, 10, octoberSunday));
 
@@ -123,13 +117,10 @@ int GetItalianGmtOffset(datetime gmtTime)
 }
 
 //+------------------------------------------------------------------+
-//| Converte l'ora del server MT4 in ora GMT                         |
-//| Nota: TimeCurrent() e' l'ora del server broker.                  |
-//| Usiamo TimeGMT() quando disponibile (MT4 build 600+).           |
+//| Converte l'ora del server MT5 in ora italiana                    |
 //+------------------------------------------------------------------+
 int GetItalianHour()
 {
-   // TimeGMT() restituisce l'ora GMT dal build 600+
    datetime gmtTime = TimeGMT();
    int offset = GetItalianGmtOffset(gmtTime);
    MqlDateTime dt;
