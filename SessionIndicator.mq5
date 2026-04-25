@@ -14,7 +14,7 @@
 input string   _sep1_              = "=== SESSIONI (ora italiana) ===";
 input int      AsiaOpen            = 2;     // Asia apertura (ora IT)
 input int      AsiaClose           = 10;    // Asia chiusura (ora IT)
-input int      LondonOpen          = 9;     // Londra apertura (ora IT)
+input int      LondonOpen          = 10;    // Londra apertura (ora IT)
 input int      LondonClose         = 18;    // Londra chiusura (ora IT)
 input int      NewYorkOpen         = 15;    // New York apertura (ora IT)
 input int      NewYorkClose        = 23;    // New York chiusura (ora IT)
