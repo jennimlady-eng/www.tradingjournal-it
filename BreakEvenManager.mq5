@@ -9,19 +9,19 @@
 #property strict
 #property description "BE da file + apertura rapida N posizioni + tab Mercato + selettore simboli + prezzo live."
 #include <Trade\Trade.mqh>
-input string ConfigFile              = "be_config.txt";
+string ConfigFile              = "be_config.txt";
 input double LockInPips              = 0.0;
-input long   MagicFilter             = -1;
-input bool   AllowBuyPositions       = true;
-input bool   AllowSellPositions      = true;
-input double MaxSpreadPips           = 999.0;
-input bool   TestAllowBEWithoutProfit= false;
+long   MagicFilter             = -1;
+bool   AllowBuyPositions       = true;
+bool   AllowSellPositions      = true;
+double MaxSpreadPips           = 999.0;
+bool   TestAllowBEWithoutProfit= false;
 input bool   DebugBELogs             = true;
-input bool   AutoAddTicketsToConfig  = true;
-input bool   AutoRemoveCanceledTickets = true;
-input string DefaultBEValue          = "NO";
-input int    DefaultQuickCount       = 3;          // ordini rapidi di default
-input string QuickCountPresets       = "1,2,3,5,10"; // preset selezionabili dal pannello
+bool   AutoAddTicketsToConfig  = true;
+bool   AutoRemoveCanceledTickets = true;
+string DefaultBEValue          = "NO";
+int    DefaultQuickCount       = 3;
+string QuickCountPresets       = "1,2,3,5,10";
 input double DefaultSlPips            = 60.0;       // SL pips di default nel pannello
 input double DefaultRiskEur           = 110.0;      // Rischio EUR di default nel pannello
 input string MainSymbols              = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
@@ -530,22 +530,21 @@ void ProcessBreakEvenAllSymbols()
       bool beApplied=(ptype==POSITION_TYPE_BUY)?(curSL>=targetSL):(curSL>0.0&&curSL<=targetSL);
       if(beApplied){g_configs[cfgIdx].applied=true;continue;}
       double profPips=(ptype==POSITION_TYPE_BUY)?(bid-openP)/pipSize:(openP-ask)/pipSize;
-      // --- Nuova regola: orario passato + posizione in perdita => "dimentica" il BE
-      if(profPips < 0.0 && !TestAllowBEWithoutProfit)
-      {
-         g_configs[cfgIdx].stale = true;
-         PrintFormat("[BE] #%I64u orario %02d:%02d passato con posizione in SL (%.1f pips): BE DIMENTICATO. Scrivere una NUOVA ora nel config per riarmare.",
-                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips);
-         continue;
-      }
+      // --- Calcolo distanza SL per verifica 1:1 RR ---
+      double slDistancePips = 0.0;
+      if(curSL > 0.0)
+         slDistancePips = (ptype==POSITION_TYPE_BUY) ? (openP - curSL) / pipSize
+                                                     : (curSL - openP) / pipSize;
+      else
+         slDistancePips = DefaultSlPips;
       double stopsLevelPips = (SymbolInfoInteger(sym,SYMBOL_TRADE_STOPS_LEVEL)*
                                SymbolInfoDouble(sym,SYMBOL_POINT)) / pipSize;
-      double minProfitPips  = MathMax(2.0, stopsLevelPips + LockInPips + 1.0);
-      if(!TestAllowBEWithoutProfit && profPips<=minProfitPips)
+      double minProfitPips = MathMax(slDistancePips, stopsLevelPips + LockInPips + 1.0);
+      if(profPips < minProfitPips)
       {
-         if(DebugBELogs)
-            PrintFormat("[BE] #%I64u non abbastanza in profitto (%.1f pips, serve >%.1f, stops_level=%.1f pips), attendo.",
-                        ticket,profPips,minProfitPips,stopsLevelPips);
+         g_configs[cfgIdx].stale = true;
+         PrintFormat("[BE] #%I64u orario %02d:%02d: profitto %.1f pips < 1:1 RR (serve >=%.1f pips): BE DIMENTICATO. Scrivere nuova ora per riarmare.",
+                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute, profPips, minProfitPips);
          continue;
       }
       bool ok=ApplyBreakEven(ticket,sym,ptype,openP,curSL,curTP,bid,ask,digits,pipSize,
