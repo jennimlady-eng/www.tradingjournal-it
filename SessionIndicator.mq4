@@ -53,6 +53,8 @@ input int      ManualGmtOffset     = 1;     // Offset GMT manuale (usato se Auto
 color  g_originalBg = clrBlack;
 string g_lastItalianDate = "";
 string g_lastSessionName = "";
+int    g_cachedServerGmtDiff = 0;
+bool   g_serverGmtDiffValid  = false;
 
 //+------------------------------------------------------------------+
 //| Calcola l'ultimo giorno domenica di un dato mese/anno            |
@@ -244,8 +246,9 @@ datetime ItalianHourToServerTime(int italianHour)
    // Ora GMT corrispondente all'ora italiana desiderata
    datetime targetGmt = italianMidnight + (italianHour - offset) * 3600;
 
-   // Differenza server-GMT (usa TimeLocal per evitare stale TimeCurrent nei weekend)
-   int serverGmtDiff = (int)(TimeLocal() - TimeGMT());
+   // Differenza server-GMT (usa offset cached aggiornato ad ogni tick)
+   int serverGmtDiff = g_serverGmtDiffValid ? g_cachedServerGmtDiff
+                                             : (int)(TimeCurrent() - TimeGMT());
 
    return targetGmt + serverGmtDiff;
 }
@@ -382,6 +385,10 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+   // Cache server-GMT offset ad ogni tick (TimeCurrent e' fresco qui)
+   g_cachedServerGmtDiff = (int)(TimeCurrent() - TimeGMT());
+   g_serverGmtDiffValid  = true;
+
    UpdateAll();
    return(rates_total);
 }
