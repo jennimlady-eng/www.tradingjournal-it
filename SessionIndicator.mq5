@@ -416,6 +416,18 @@ void DrawAllRects(long cid, string sym, ENUM_TIMEFRAMES tf)
       DrawDay(cid, sym, tf, mid, TimeToString(mid, TIME_DATE));
    }
    DrawDSTLines(cid);
+
+   // Sentinel: segna che i rettangoli sono stati disegnati
+   string sentinel = PREFIX + "DRAWN";
+   if(ObjectFind(cid, sentinel) < 0)
+   {
+      ObjectCreate(cid, sentinel, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(cid, sentinel, OBJPROP_XDISTANCE, -100);
+      ObjectSetInteger(cid, sentinel, OBJPROP_YDISTANCE, -100);
+      ObjectSetInteger(cid, sentinel, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(cid, sentinel, OBJPROP_SELECTABLE, false);
+      ObjectSetString(cid, sentinel, OBJPROP_TEXT, "");
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -593,7 +605,7 @@ void CleanupChart(long cid)
 void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
 {
    bool tblExists = (ObjectFind(cid, PREFIX + "TB") >= 0);
-   bool rectsExist = (ObjectFind(cid, PREFIX + "DS_" + IntegerToString(TimeToStruct2Year())) >= 0);
+   bool rectsExist = (ObjectFind(cid, PREFIX + "DRAWN") >= 0);
 
    if(!rectsExist || forceRects)
       DrawAllRects(cid, sym, tf);
@@ -605,13 +617,6 @@ void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
    }
 
    ChartRedraw(cid);
-}
-
-int TimeToStruct2Year()
-{
-   MqlDateTime dt;
-   TimeToStruct(TimeGMT(), dt);
-   return dt.year;
 }
 
 //+------------------------------------------------------------------+
