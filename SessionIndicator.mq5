@@ -551,19 +551,24 @@ void UpdateTable()
       string sStr = StringFormat("%02d:00", sH);
       string eStr = StringFormat("%02d:00", eH);
 
-      // Open/Closed - forex reopens Sunday evening (~22:00 UTC)
+      // Open/Closed - forex market: Sun ~22:00 UTC -> Fri ~22:00 UTC
       bool isOpen = false;
-      if(dow >= 1 && dow <= 5)
+      if(dow >= 1 && dow <= 4)
       {
          if(sH < eH)
             isOpen = (hUTC >= sH && hUTC < eH);
          else
             isOpen = (hUTC >= sH || hUTC < eH);
       }
+      else if(dow == 5)
+      {
+         if(sH < eH)
+            isOpen = (hUTC >= sH && hUTC < eH);
+         else
+            isOpen = (hUTC < eH);
+      }
       else if(dow == 0 && sH >= 20)
          isOpen = (hUTC >= sH);
-      else if(dow == 6 && sH > eH)
-         isOpen = (hUTC < eH);
 
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
