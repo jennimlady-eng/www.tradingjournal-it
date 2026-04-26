@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
 //|                                          SessionIndicator.mq5    |
-//|   Indicatore sessioni di trading v3.2                            |
+//|   Indicatore sessioni di trading v4.0                            |
+//|   Metti su UN grafico - gestisce TUTTI i grafici automaticamente |
 //|   Rettangoli: London, New York                                   |
-//|   Tabella FOREX Session compatta in alto a SINISTRA              |
+//|   Tabella FOREX Session in basso a SINISTRA                      |
 //|   Linea verticale rosso fuoco al cambio ora legale italiana      |
-//|   Usa ApplySessionIndicator.mq5 per applicare su tutti i grafici |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "3.20"
+#property version     "4.10"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -39,34 +39,31 @@ input bool     ShowTable           = true;                // Mostra tabella
 
 //--- Generale ---
 input string   _sep4_              = "=== GENERALE ===";
-input int      DaysToShow          = 30;                  // Giorni rettangoli
+input int      DaysToShow          = 365;                 // Giorni rettangoli
 input bool     AutoDST             = true;                // DST automatica
 input int      ManualGmtOffset     = 1;                   // Offset manuale
 input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
 
 //--- Costanti ---
-#define NUM_SESS     7
+#define NUM_SESS     5
+#define PREFIX       "SI_"
 
-// Layout tabella compatta (CORNER_LEFT_UPPER)
+// Layout tabella (CORNER_LEFT_LOWER, basso sinistra)
 #define TBL_MARGIN   8
-#define TBL_W        330
-#define TBL_TITLE_H  18
-#define TBL_HDR_H    15
-#define TBL_ROW_H    15
+#define TBL_W        350
+#define TBL_TITLE_H  20
+#define TBL_HDR_H    17
+#define TBL_ROW_H    17
 #define COL_SESS     6
-#define COL_DST      68
-#define COL_START    140
-#define COL_END      205
-#define COL_STATUS   265
-#define COL_STATUS_W 58
+#define COL_DST      72
+#define COL_START    150
+#define COL_END      218
+#define COL_STATUS   278
+#define COL_STATUS_W 64
 
 //--- Variabili globali ---
-string g_prefix;
 int    g_srvDiff    = 0;
 bool   g_diffOk     = false;
-int    g_lastBars   = 0;
-bool   g_tblOk      = false;
-bool   g_rectsDrawn = false;
 
 //--- Dati sessioni per tabella ---
 string g_sName[NUM_SESS];
@@ -82,12 +79,10 @@ int    g_sDstType[NUM_SESS];
 void InitSessData()
 {
    g_sName[0]="Asia";      g_sWinS[0]=22; g_sWinE[0]=7;  g_sDstS[0]=21; g_sDstE[0]=6;  g_sDstType[0]=3;
-   g_sName[1]="Sydney";    g_sWinS[1]=22; g_sWinE[1]=6;  g_sDstS[1]=21; g_sDstE[1]=5;  g_sDstType[1]=3;
-   g_sName[2]="Tokyo";     g_sWinS[2]=23; g_sWinE[2]=7;  g_sDstS[2]=23; g_sDstE[2]=7;  g_sDstType[2]=0;
-   g_sName[3]="Shanghai";  g_sWinS[3]=1;  g_sWinE[3]=9;  g_sDstS[3]=1;  g_sDstE[3]=9;  g_sDstType[3]=0;
-   g_sName[4]="Europe";    g_sWinS[4]=7;  g_sWinE[4]=16; g_sDstS[4]=6;  g_sDstE[4]=15; g_sDstType[4]=1;
-   g_sName[5]="London";    g_sWinS[5]=8;  g_sWinE[5]=16; g_sDstS[5]=7;  g_sDstE[5]=15; g_sDstType[5]=1;
-   g_sName[6]="New York";  g_sWinS[6]=13; g_sWinE[6]=21; g_sDstS[6]=12; g_sDstE[6]=20; g_sDstType[6]=2;
+   g_sName[1]="Tokyo";     g_sWinS[1]=23; g_sWinE[1]=7;  g_sDstS[1]=23; g_sDstE[1]=7;  g_sDstType[1]=0;
+   g_sName[2]="Shanghai";  g_sWinS[2]=1;  g_sWinE[2]=9;  g_sDstS[2]=1;  g_sDstE[2]=9;  g_sDstType[2]=0;
+   g_sName[3]="London";    g_sWinS[3]=8;  g_sWinE[3]=16; g_sDstS[3]=7;  g_sDstE[3]=15; g_sDstType[3]=1;
+   g_sName[4]="New York";  g_sWinS[4]=13; g_sWinE[4]=21; g_sDstS[4]=12; g_sDstE[4]=20; g_sDstType[4]=2;
 }
 
 //+------------------------------------------------------------------+
@@ -108,7 +103,7 @@ bool IsSymbolInList(string sym)
 }
 
 //+------------------------------------------------------------------+
-//| Calcola l'ultimo giorno domenica di un dato mese/anno            |
+//| Calcolo DST                                                      |
 //+------------------------------------------------------------------+
 int LastSundayOfMonth(int year, int month)
 {
@@ -150,9 +145,6 @@ int SecondSundayOfMonth(int year, int month)
    return FirstSundayOfMonth(year, month) + 7;
 }
 
-//+------------------------------------------------------------------+
-//| DST italiana (CET/CEST) - ultima dom. marzo/ottobre 01:00 UTC    |
-//+------------------------------------------------------------------+
 bool IsItalianDST(datetime gmtTime)
 {
    MqlDateTime dt;
@@ -167,9 +159,6 @@ bool IsItalianDST(datetime gmtTime)
 
 bool IsEuDST(datetime gmtTime) { return IsItalianDST(gmtTime); }
 
-//+------------------------------------------------------------------+
-//| DST USA - 2a dom. marzo 07:00 UTC -> 1a dom. novembre 06:00 UTC |
-//+------------------------------------------------------------------+
 bool IsUsDST(datetime gmtTime)
 {
    MqlDateTime dt;
@@ -182,9 +171,6 @@ bool IsUsDST(datetime gmtTime)
    return (gmtTime >= s && gmtTime < e);
 }
 
-//+------------------------------------------------------------------+
-//| DST Australia - 1a dom. ottobre -> 1a dom. aprile                |
-//+------------------------------------------------------------------+
 bool IsAuDST(datetime gmtTime)
 {
    MqlDateTime dt;
@@ -237,9 +223,10 @@ datetime ItHourToSrv(int itHour, datetime srvMidnight)
 }
 
 //+------------------------------------------------------------------+
-//| Trova high/low del prezzo in un intervallo                       |
+//| Trova high/low del prezzo per un simbolo/tf in un intervallo     |
 //+------------------------------------------------------------------+
-void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
+void GetPriceRange(string sym, ENUM_TIMEFRAMES tf,
+                   datetime t1, datetime t2, double &hi, double &lo)
 {
    hi = 0;
    lo = DBL_MAX;
@@ -250,8 +237,8 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
       t2 = tmp;
    }
    double hs[], ls[];
-   int ch = CopyHigh(_Symbol, PERIOD_CURRENT, t1, t2, hs);
-   int cl = CopyLow(_Symbol, PERIOD_CURRENT, t1, t2, ls);
+   int ch = CopyHigh(sym, tf, t1, t2, hs);
+   int cl = CopyLow(sym, tf, t1, t2, ls);
    if(ch > 0 && cl > 0)
    {
       int cnt = (int)MathMin(ch, cl);
@@ -264,104 +251,108 @@ void GetPriceRange(datetime t1, datetime t2, double &hi, double &lo)
    if(hi <= 0 || lo >= DBL_MAX || lo <= 0)
    {
       double fb[1];
-      if(CopyHigh(_Symbol, PERIOD_CURRENT, 0, 1, fb) > 0) hi = fb[0];
+      if(CopyHigh(sym, tf, 0, 1, fb) > 0) hi = fb[0];
       else hi = 1.0;
       double fl[1];
-      if(CopyLow(_Symbol, PERIOD_CURRENT, 0, 1, fl) > 0) lo = fl[0];
+      if(CopyLow(sym, tf, 0, 1, fl) > 0) lo = fl[0];
       else lo = hi * 0.999;
    }
 }
 
 //+------------------------------------------------------------------+
-//| Disegna un rettangolo + bordo + etichetta                        |
+//| Disegna un rettangolo + bordo + etichetta su un grafico          |
 //+------------------------------------------------------------------+
-void DrawRect(string tag, datetime t1, datetime t2,
+void DrawRect(long cid, string sym, ENUM_TIMEFRAMES tf,
+              string tag, datetime t1, datetime t2,
               color fillClr, color borderClr, color lblClr, string lblText)
 {
    if(t1 >= t2) return;
    double hi, lo;
-   GetPriceRange(t1, t2, hi, lo);
+   GetPriceRange(sym, tf, t1, t2, hi, lo);
    double rng = hi - lo;
    if(rng <= 0) rng = hi * 0.002;
    hi += rng * 0.03;
    lo -= rng * 0.03;
 
-   string rf = g_prefix + "F_" + tag;
-   if(ObjectFind(0, rf) < 0)
+   string rf = PREFIX + "F_" + tag;
+   if(ObjectFind(cid, rf) < 0)
    {
-      ObjectCreate(0, rf, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
-      ObjectSetInteger(0, rf, OBJPROP_COLOR, fillClr);
-      ObjectSetInteger(0, rf, OBJPROP_FILL, true);
-      ObjectSetInteger(0, rf, OBJPROP_BACK, true);
-      ObjectSetInteger(0, rf, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, rf, OBJPROP_HIDDEN, true);
+      ObjectCreate(cid, rf, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
+      ObjectSetInteger(cid, rf, OBJPROP_COLOR, fillClr);
+      ObjectSetInteger(cid, rf, OBJPROP_FILL, true);
+      ObjectSetInteger(cid, rf, OBJPROP_BACK, true);
+      ObjectSetInteger(cid, rf, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(cid, rf, OBJPROP_HIDDEN, true);
    }
    else
    {
-      ObjectSetInteger(0, rf, OBJPROP_TIME, 0, t1);
-      ObjectSetDouble(0, rf, OBJPROP_PRICE, 0, hi);
-      ObjectSetInteger(0, rf, OBJPROP_TIME, 1, t2);
-      ObjectSetDouble(0, rf, OBJPROP_PRICE, 1, lo);
+      ObjectSetInteger(cid, rf, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(cid, rf, OBJPROP_PRICE, 0, hi);
+      ObjectSetInteger(cid, rf, OBJPROP_TIME, 1, t2);
+      ObjectSetDouble(cid, rf, OBJPROP_PRICE, 1, lo);
    }
 
-   string rb = g_prefix + "B_" + tag;
-   if(ObjectFind(0, rb) < 0)
+   string rb = PREFIX + "B_" + tag;
+   if(ObjectFind(cid, rb) < 0)
    {
-      ObjectCreate(0, rb, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
-      ObjectSetInteger(0, rb, OBJPROP_COLOR, borderClr);
-      ObjectSetInteger(0, rb, OBJPROP_FILL, false);
-      ObjectSetInteger(0, rb, OBJPROP_BACK, false);
-      ObjectSetInteger(0, rb, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, rb, OBJPROP_HIDDEN, true);
-      ObjectSetInteger(0, rb, OBJPROP_WIDTH, 2);
+      ObjectCreate(cid, rb, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
+      ObjectSetInteger(cid, rb, OBJPROP_COLOR, borderClr);
+      ObjectSetInteger(cid, rb, OBJPROP_FILL, false);
+      ObjectSetInteger(cid, rb, OBJPROP_BACK, false);
+      ObjectSetInteger(cid, rb, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(cid, rb, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(cid, rb, OBJPROP_WIDTH, 2);
    }
    else
    {
-      ObjectSetInteger(0, rb, OBJPROP_TIME, 0, t1);
-      ObjectSetDouble(0, rb, OBJPROP_PRICE, 0, hi);
-      ObjectSetInteger(0, rb, OBJPROP_TIME, 1, t2);
-      ObjectSetDouble(0, rb, OBJPROP_PRICE, 1, lo);
+      ObjectSetInteger(cid, rb, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(cid, rb, OBJPROP_PRICE, 0, hi);
+      ObjectSetInteger(cid, rb, OBJPROP_TIME, 1, t2);
+      ObjectSetDouble(cid, rb, OBJPROP_PRICE, 1, lo);
    }
 
-   string ln = g_prefix + "L_" + tag;
-   if(ObjectFind(0, ln) < 0)
+   string ln = PREFIX + "L_" + tag;
+   if(ObjectFind(cid, ln) < 0)
    {
-      ObjectCreate(0, ln, OBJ_TEXT, 0, t1, hi);
-      ObjectSetString(0, ln, OBJPROP_TEXT, " " + lblText);
-      ObjectSetString(0, ln, OBJPROP_FONT, "Arial Bold");
-      ObjectSetInteger(0, ln, OBJPROP_FONTSIZE, LabelFontSize);
-      ObjectSetInteger(0, ln, OBJPROP_COLOR, lblClr);
-      ObjectSetInteger(0, ln, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
-      ObjectSetInteger(0, ln, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, ln, OBJPROP_HIDDEN, true);
+      ObjectCreate(cid, ln, OBJ_TEXT, 0, t1, hi);
+      ObjectSetString(cid, ln, OBJPROP_TEXT, " " + lblText);
+      ObjectSetString(cid, ln, OBJPROP_FONT, "Arial Bold");
+      ObjectSetInteger(cid, ln, OBJPROP_FONTSIZE, LabelFontSize);
+      ObjectSetInteger(cid, ln, OBJPROP_COLOR, lblClr);
+      ObjectSetInteger(cid, ln, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
+      ObjectSetInteger(cid, ln, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(cid, ln, OBJPROP_HIDDEN, true);
    }
    else
    {
-      ObjectSetInteger(0, ln, OBJPROP_TIME, 0, t1);
-      ObjectSetDouble(0, ln, OBJPROP_PRICE, 0, hi);
+      ObjectSetInteger(cid, ln, OBJPROP_TIME, 0, t1);
+      ObjectSetDouble(cid, ln, OBJPROP_PRICE, 0, hi);
    }
 }
 
 //+------------------------------------------------------------------+
-//| Disegna sessioni per un giorno (solo London e NY)                |
+//| Disegna sessioni per un giorno su un grafico                     |
 //+------------------------------------------------------------------+
-void DrawDay(datetime srvMid, string sfx)
+void DrawDay(long cid, string sym, ENUM_TIMEFRAMES tf,
+             datetime srvMid, string sfx)
 {
    datetime ldnO = ItHourToSrv(LondonOpenIT, srvMid);
    datetime ldnC = ItHourToSrv(LondonCloseIT, srvMid);
    if(ldnO < ldnC)
-      DrawRect("LDN_" + sfx, ldnO, ldnC, ColorLondon, BorderLondon, LblColorLondon, "London");
+      DrawRect(cid, sym, tf, "LDN_" + sfx, ldnO, ldnC,
+               ColorLondon, BorderLondon, LblColorLondon, "London");
 
    datetime nyO = ItHourToSrv(NewYorkOpenIT, srvMid);
    datetime nyC = ItHourToSrv(NewYorkCloseIT, srvMid);
    if(nyO < nyC)
-      DrawRect("NY_" + sfx, nyO, nyC, ColorNewYork, BorderNewYork, LblColorNewYork, "New York");
+      DrawRect(cid, sym, tf, "NY_" + sfx, nyO, nyC,
+               ColorNewYork, BorderNewYork, LblColorNewYork, "New York");
 }
 
 //+------------------------------------------------------------------+
-//| Linee verticali al cambio ora legale italiana                    |
+//| Linee verticali al cambio ora legale italiana su un grafico      |
 //+------------------------------------------------------------------+
-void DrawDSTLines()
+void DrawDSTLines(long cid)
 {
    if(!ShowDSTLine || !g_diffOk) return;
    datetime gmt = TimeGMT();
@@ -373,40 +364,40 @@ void DrawDSTLines()
    {
       int ms = LastSundayOfMonth(y, 3);
       datetime gsS = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 3, ms));
-      string nS = g_prefix + "DS_" + IntegerToString(y);
-      if(ObjectFind(0, nS) < 0)
+      string nS = PREFIX + "DS_" + IntegerToString(y);
+      if(ObjectFind(cid, nS) < 0)
       {
-         ObjectCreate(0, nS, OBJ_VLINE, 0, gsS + g_srvDiff, 0);
-         ObjectSetInteger(0, nS, OBJPROP_COLOR, DSTLineColor);
-         ObjectSetInteger(0, nS, OBJPROP_WIDTH, DSTLineWidth);
-         ObjectSetInteger(0, nS, OBJPROP_STYLE, DSTLineStyle);
-         ObjectSetInteger(0, nS, OBJPROP_BACK, false);
-         ObjectSetInteger(0, nS, OBJPROP_SELECTABLE, false);
-         ObjectSetInteger(0, nS, OBJPROP_HIDDEN, false);
-         ObjectSetString(0, nS, OBJPROP_TOOLTIP, "Inizio CEST " + IntegerToString(y));
+         ObjectCreate(cid, nS, OBJ_VLINE, 0, gsS + g_srvDiff, 0);
+         ObjectSetInteger(cid, nS, OBJPROP_COLOR, DSTLineColor);
+         ObjectSetInteger(cid, nS, OBJPROP_WIDTH, DSTLineWidth);
+         ObjectSetInteger(cid, nS, OBJPROP_STYLE, DSTLineStyle);
+         ObjectSetInteger(cid, nS, OBJPROP_BACK, false);
+         ObjectSetInteger(cid, nS, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(cid, nS, OBJPROP_HIDDEN, false);
+         ObjectSetString(cid, nS, OBJPROP_TOOLTIP, "Inizio CEST " + IntegerToString(y));
       }
 
       int os = LastSundayOfMonth(y, 10);
       datetime gsE = StringToTime(StringFormat("%d.%02d.%02d 01:00", y, 10, os));
-      string nE = g_prefix + "DE_" + IntegerToString(y);
-      if(ObjectFind(0, nE) < 0)
+      string nE = PREFIX + "DE_" + IntegerToString(y);
+      if(ObjectFind(cid, nE) < 0)
       {
-         ObjectCreate(0, nE, OBJ_VLINE, 0, gsE + g_srvDiff, 0);
-         ObjectSetInteger(0, nE, OBJPROP_COLOR, DSTLineColor);
-         ObjectSetInteger(0, nE, OBJPROP_WIDTH, DSTLineWidth);
-         ObjectSetInteger(0, nE, OBJPROP_STYLE, DSTLineStyle);
-         ObjectSetInteger(0, nE, OBJPROP_BACK, false);
-         ObjectSetInteger(0, nE, OBJPROP_SELECTABLE, false);
-         ObjectSetInteger(0, nE, OBJPROP_HIDDEN, false);
-         ObjectSetString(0, nE, OBJPROP_TOOLTIP, "Fine CEST " + IntegerToString(y));
+         ObjectCreate(cid, nE, OBJ_VLINE, 0, gsE + g_srvDiff, 0);
+         ObjectSetInteger(cid, nE, OBJPROP_COLOR, DSTLineColor);
+         ObjectSetInteger(cid, nE, OBJPROP_WIDTH, DSTLineWidth);
+         ObjectSetInteger(cid, nE, OBJPROP_STYLE, DSTLineStyle);
+         ObjectSetInteger(cid, nE, OBJPROP_BACK, false);
+         ObjectSetInteger(cid, nE, OBJPROP_SELECTABLE, false);
+         ObjectSetInteger(cid, nE, OBJPROP_HIDDEN, false);
+         ObjectSetString(cid, nE, OBJPROP_TOOLTIP, "Fine CEST " + IntegerToString(y));
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Disegna tutti i rettangoli                                       |
+//| Disegna tutti i rettangoli su un grafico                         |
 //+------------------------------------------------------------------+
-void DrawAllRects()
+void DrawAllRects(long cid, string sym, ENUM_TIMEFRAMES tf)
 {
    if(!g_diffOk) return;
    MqlDateTime ds;
@@ -420,62 +411,73 @@ void DrawAllRects()
       MqlDateTime dd;
       TimeToStruct(mid, dd);
       if(dd.day_of_week == 0 || dd.day_of_week == 6) continue;
-      DrawDay(mid, TimeToString(mid, TIME_DATE));
+      DrawDay(cid, sym, tf, mid, TimeToString(mid, TIME_DATE));
    }
-   DrawDSTLines();
-   g_rectsDrawn = true;
+   DrawDSTLines(cid);
+
+   // Sentinel: segna che i rettangoli sono stati disegnati
+   string sentinel = PREFIX + "DRAWN";
+   if(ObjectFind(cid, sentinel) < 0)
+   {
+      ObjectCreate(cid, sentinel, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(cid, sentinel, OBJPROP_XDISTANCE, -100);
+      ObjectSetInteger(cid, sentinel, OBJPROP_YDISTANCE, -100);
+      ObjectSetInteger(cid, sentinel, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(cid, sentinel, OBJPROP_SELECTABLE, false);
+      ObjectSetString(cid, sentinel, OBJPROP_TEXT, "");
+   }
 }
 
 //+------------------------------------------------------------------+
-//| Helper: crea pannello (OBJ_RECTANGLE_LABEL)                      |
+//| Helper: crea pannello su un grafico                              |
 //+------------------------------------------------------------------+
-void MakePanel(string name, int x, int y, int w, int h, color bg)
+void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
 {
-   if(ObjectFind(0, name) >= 0)
+   if(ObjectFind(cid, name) >= 0)
    {
-      ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
-      ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, bg);
+      ObjectSetInteger(cid, name, OBJPROP_BGCOLOR, bg);
+      ObjectSetInteger(cid, name, OBJPROP_BORDER_COLOR, bg);
       return;
    }
-   ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
-   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
-   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
-   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
-   ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, bg);
-   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectCreate(cid, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(cid, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(cid, name, OBJPROP_YSIZE, h);
+   ObjectSetInteger(cid, name, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(cid, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(cid, name, OBJPROP_BORDER_COLOR, bg);
+   ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
 }
 
 //+------------------------------------------------------------------+
-//| Helper: crea/aggiorna etichetta testo                            |
+//| Helper: crea/aggiorna etichetta su un grafico                    |
 //+------------------------------------------------------------------+
-void MakeLabel(string name, int x, int y, string text, color clr,
+void MakeLabel(long cid, string name, int x, int y, string text, color clr,
                int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_UPPER)
 {
-   if(ObjectFind(0, name) < 0)
+   if(ObjectFind(cid, name) < 0)
    {
-      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-      ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
-      ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-      ObjectSetString(0, name, OBJPROP_FONT, font);
-      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fsize);
-      ObjectSetInteger(0, name, OBJPROP_ANCHOR, anch);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectCreate(cid, name, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+      ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
+      ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
+      ObjectSetString(cid, name, OBJPROP_FONT, font);
+      ObjectSetInteger(cid, name, OBJPROP_FONTSIZE, fsize);
+      ObjectSetInteger(cid, name, OBJPROP_ANCHOR, anch);
+      ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
    }
-   ObjectSetString(0, name, OBJPROP_TEXT, text);
-   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetString(cid, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(cid, name, OBJPROP_COLOR, clr);
 }
 
 //+------------------------------------------------------------------+
-//| Crea la struttura della tabella (compatta, angolo sinistro)      |
+//| Crea la struttura della tabella su un grafico                    |
 //+------------------------------------------------------------------+
-void CreateTable()
+void CreateTable(long cid)
 {
    if(!ShowTable) return;
 
@@ -485,45 +487,44 @@ void CreateTable()
    color cRowO   = C'55,58,62';
    color cTxt    = C'200,200,200';
 
+   // Build from bottom: rows first, then header, then title on top
    int y = TBL_MARGIN;
 
-   MakePanel(g_prefix+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(g_prefix+"TT", TBL_MARGIN + TBL_W/2, y + 2, "FOREX Session", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
-   y += TBL_TITLE_H;
-
-   MakePanel(g_prefix+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
-   int hy = y + 2;
-   MakeLabel(g_prefix+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 7, "Arial Bold");
-   MakeLabel(g_prefix+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 7, "Arial Bold");
-   y += TBL_HDR_H;
-
-   for(int i = 0; i < NUM_SESS; i++)
+   for(int r = NUM_SESS - 1; r >= 0; r--)
    {
-      color rBg = (i % 2 == 0) ? cRowE : cRowO;
-      string si = IntegerToString(i);
-      MakePanel(g_prefix+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
-      int ry = y + 2;
-      MakeLabel(g_prefix+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[i], clrWhite, 7);
-      MakeLabel(g_prefix+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 7);
-      MakeLabel(g_prefix+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 7);
-      MakeLabel(g_prefix+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 7);
+      color rBg = (r % 2 == 0) ? cRowE : cRowO;
+      string si = IntegerToString(r);
+      MakePanel(cid, PREFIX+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
+      int ry = y + TBL_ROW_H - 3;
+      MakeLabel(cid, PREFIX+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[r], clrWhite, 8);
+      MakeLabel(cid, PREFIX+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 8);
+      MakeLabel(cid, PREFIX+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 8);
+      MakeLabel(cid, PREFIX+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 8);
 
-      MakePanel(g_prefix+"SB_"+si, TBL_MARGIN + COL_STATUS, ry - 1, COL_STATUS_W, TBL_ROW_H - 2, C'178,34,34');
-      MakeLabel(g_prefix+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
+      MakePanel(cid, PREFIX+"SB_"+si, TBL_MARGIN + COL_STATUS, y + 2, COL_STATUS_W, TBL_ROW_H - 4, C'178,34,34');
+      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, y + TBL_ROW_H - 4, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
       y += TBL_ROW_H;
    }
-   g_tblOk = true;
+
+   MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
+   int hy = y + TBL_HDR_H - 3;
+   MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 8, "Arial Bold");
+   y += TBL_HDR_H;
+
+   MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
+   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + TBL_TITLE_H - 4, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_UPPER);
 }
 
 //+------------------------------------------------------------------+
-//| Aggiorna dati dinamici della tabella                             |
+//| Aggiorna dati dinamici della tabella su un grafico               |
 //+------------------------------------------------------------------+
-void UpdateTable()
+void UpdateTable(long cid)
 {
-   if(!ShowTable || !g_tblOk) return;
+   if(!ShowTable) return;
 
    datetime gmt = TimeGMT();
    MqlDateTime dtG;
@@ -572,28 +573,75 @@ void UpdateTable()
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
 
-      MakeLabel(g_prefix+"RD_"+si,  0, 0, dTxt, dClr, 7);
-      MakeLabel(g_prefix+"RT1_"+si, 0, 0, sStr, C'200,200,200', 7);
-      MakeLabel(g_prefix+"RT2_"+si, 0, 0, eStr, C'200,200,200', 7);
+      MakeLabel(cid, PREFIX+"RD_"+si,  0, 0, dTxt, dClr, 8);
+      MakeLabel(cid, PREFIX+"RT1_"+si, 0, 0, sStr, C'200,200,200', 8);
+      MakeLabel(cid, PREFIX+"RT2_"+si, 0, 0, eStr, C'200,200,200', 8);
 
-      ObjectSetInteger(0, g_prefix+"SB_"+si, OBJPROP_BGCOLOR, stBg);
-      ObjectSetInteger(0, g_prefix+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
-      MakeLabel(g_prefix+"SS_"+si, 0, 0, stTx, clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
+      ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BGCOLOR, stBg);
+      ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
+      MakeLabel(cid, PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
    }
 }
 
 //+------------------------------------------------------------------+
-//| Pulizia oggetti                                                  |
+//| Pulizia oggetti da un grafico                                    |
 //+------------------------------------------------------------------+
-void Cleanup()
+void CleanupChart(long cid)
 {
-   int total = ObjectsTotal(0);
+   int total = ObjectsTotal(cid);
    for(int i = total - 1; i >= 0; i--)
    {
-      string name = ObjectName(0, i);
-      if(StringFind(name, g_prefix) == 0)
-         ObjectDelete(0, name);
+      string name = ObjectName(cid, i);
+      if(StringFind(name, PREFIX) == 0)
+         ObjectDelete(cid, name);
    }
+}
+
+//+------------------------------------------------------------------+
+//| Pulizia solo rettangoli/DST da un grafico (lascia tabella)       |
+//+------------------------------------------------------------------+
+void CleanupRects(long cid)
+{
+   int total = ObjectsTotal(cid);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(cid, i);
+      if(StringFind(name, PREFIX + "F_") == 0 ||
+         StringFind(name, PREFIX + "B_") == 0 ||
+         StringFind(name, PREFIX + "L_") == 0 ||
+         StringFind(name, PREFIX + "DS_") == 0 ||
+         StringFind(name, PREFIX + "DE_") == 0 ||
+         name == PREFIX + "DRAWN")
+         ObjectDelete(cid, name);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Processa un singolo grafico                                      |
+//+------------------------------------------------------------------+
+void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
+{
+   bool tblExists = (ObjectFind(cid, PREFIX + "TB") >= 0);
+   bool rectsExist = (ObjectFind(cid, PREFIX + "DRAWN") >= 0);
+   bool showRects = (tf < PERIOD_H4);
+
+   if(showRects)
+   {
+      if(!rectsExist || forceRects)
+         DrawAllRects(cid, sym, tf);
+   }
+   else if(rectsExist)
+   {
+      CleanupRects(cid);
+   }
+
+   if(ShowTable)
+   {
+      if(!tblExists) CreateTable(cid);
+      UpdateTable(cid);
+   }
+
+   ChartRedraw(cid);
 }
 
 //+------------------------------------------------------------------+
@@ -601,34 +649,29 @@ void Cleanup()
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   long chartId = ChartID();
-   g_prefix = "SI" + IntegerToString(chartId) + "_";
-
-   if(!IsSymbolInList(_Symbol))
-   {
-      Print("SessionIndicator: simbolo ", _Symbol, " non nella lista consentita");
-      return(INIT_FAILED);
-   }
-
    InitSessData();
    EventSetTimer(1);
-
    return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
-//| OnDeinit                                                         |
+//| OnDeinit - pulisci TUTTI i grafici                               |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
    EventKillTimer();
-   Cleanup();
 
-   ChartRedraw(0);
+   long cid = ChartFirst();
+   while(cid >= 0)
+   {
+      CleanupChart(cid);
+      ChartRedraw(cid);
+      cid = ChartNext(cid);
+   }
 }
 
 //+------------------------------------------------------------------+
-//| Timer - aggiorna tabella e ridisegna se necessario               |
+//| Timer - gestisce tutti i grafici                                 |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
@@ -644,23 +687,22 @@ void OnTimer()
    }
    if(!g_diffOk) return;
 
-   if(!g_rectsDrawn)
-   {
-      DrawAllRects();
-      ChartRedraw(0);
-   }
+   static int tickCount = 0;
+   tickCount++;
+   bool forceRects = (tickCount % 60 == 1);
 
-   if(ShowTable)
+   long cid = ChartFirst();
+   while(cid >= 0)
    {
-      if(!g_tblOk) CreateTable();
-      UpdateTable();
+      string sym = ChartSymbol(cid);
+      if(IsSymbolInList(sym))
+         ProcessChart(cid, sym, ChartPeriod(cid), forceRects);
+      cid = ChartNext(cid);
    }
-
-   ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| OnCalculate - disegna rettangoli ad ogni nuova barra             |
+//| OnCalculate                                                      |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -678,16 +720,6 @@ int OnCalculate(const int rates_total,
       g_srvDiff = (int)(TimeCurrent() - TimeGMT());
       g_diffOk = true;
    }
-
-   if(!g_rectsDrawn || rates_total != g_lastBars)
-   {
-      DrawAllRects();
-      if(ShowTable && !g_tblOk) CreateTable();
-      if(ShowTable) UpdateTable();
-      ChartRedraw(0);
-      g_lastBars = rates_total;
-   }
-
    return(rates_total);
 }
 //+------------------------------------------------------------------+
