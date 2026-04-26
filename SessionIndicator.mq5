@@ -3,12 +3,12 @@
 //|   Indicatore sessioni di trading v4.0                            |
 //|   Metti su UN grafico - gestisce TUTTI i grafici automaticamente |
 //|   Rettangoli: London, New York                                   |
-//|   Tabella FOREX Session compatta in alto a SINISTRA              |
+//|   Tabella FOREX Session in basso a SINISTRA                      |
 //|   Linea verticale rosso fuoco al cambio ora legale italiana      |
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "4.00"
+#property version     "4.10"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -39,27 +39,27 @@ input bool     ShowTable           = true;                // Mostra tabella
 
 //--- Generale ---
 input string   _sep4_              = "=== GENERALE ===";
-input int      DaysToShow          = 30;                  // Giorni rettangoli
+input int      DaysToShow          = 365;                 // Giorni rettangoli
 input bool     AutoDST             = true;                // DST automatica
 input int      ManualGmtOffset     = 1;                   // Offset manuale
 input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
 
 //--- Costanti ---
-#define NUM_SESS     7
+#define NUM_SESS     5
 #define PREFIX       "SI_"
 
-// Layout tabella compatta (CORNER_LEFT_UPPER)
+// Layout tabella (CORNER_LEFT_LOWER, basso sinistra)
 #define TBL_MARGIN   8
-#define TBL_W        330
-#define TBL_TITLE_H  18
-#define TBL_HDR_H    15
-#define TBL_ROW_H    15
+#define TBL_W        350
+#define TBL_TITLE_H  20
+#define TBL_HDR_H    17
+#define TBL_ROW_H    17
 #define COL_SESS     6
-#define COL_DST      68
-#define COL_START    140
-#define COL_END      205
-#define COL_STATUS   265
-#define COL_STATUS_W 58
+#define COL_DST      72
+#define COL_START    150
+#define COL_END      218
+#define COL_STATUS   278
+#define COL_STATUS_W 64
 
 //--- Variabili globali ---
 int    g_srvDiff    = 0;
@@ -79,12 +79,10 @@ int    g_sDstType[NUM_SESS];
 void InitSessData()
 {
    g_sName[0]="Asia";      g_sWinS[0]=22; g_sWinE[0]=7;  g_sDstS[0]=21; g_sDstE[0]=6;  g_sDstType[0]=3;
-   g_sName[1]="Sydney";    g_sWinS[1]=22; g_sWinE[1]=6;  g_sDstS[1]=21; g_sDstE[1]=5;  g_sDstType[1]=3;
-   g_sName[2]="Tokyo";     g_sWinS[2]=23; g_sWinE[2]=7;  g_sDstS[2]=23; g_sDstE[2]=7;  g_sDstType[2]=0;
-   g_sName[3]="Shanghai";  g_sWinS[3]=1;  g_sWinE[3]=9;  g_sDstS[3]=1;  g_sDstE[3]=9;  g_sDstType[3]=0;
-   g_sName[4]="Europe";    g_sWinS[4]=7;  g_sWinE[4]=16; g_sDstS[4]=6;  g_sDstE[4]=15; g_sDstType[4]=1;
-   g_sName[5]="London";    g_sWinS[5]=8;  g_sWinE[5]=16; g_sDstS[5]=7;  g_sDstE[5]=15; g_sDstType[5]=1;
-   g_sName[6]="New York";  g_sWinS[6]=13; g_sWinE[6]=21; g_sDstS[6]=12; g_sDstE[6]=20; g_sDstType[6]=2;
+   g_sName[1]="Tokyo";     g_sWinS[1]=23; g_sWinE[1]=7;  g_sDstS[1]=23; g_sDstE[1]=7;  g_sDstType[1]=0;
+   g_sName[2]="Shanghai";  g_sWinS[2]=1;  g_sWinE[2]=9;  g_sDstS[2]=1;  g_sDstE[2]=9;  g_sDstType[2]=0;
+   g_sName[3]="London";    g_sWinS[3]=8;  g_sWinE[3]=16; g_sDstS[3]=7;  g_sDstE[3]=15; g_sDstType[3]=1;
+   g_sName[4]="New York";  g_sWinS[4]=13; g_sWinE[4]=21; g_sDstS[4]=12; g_sDstE[4]=20; g_sDstType[4]=2;
 }
 
 //+------------------------------------------------------------------+
@@ -442,7 +440,7 @@ void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
       return;
    }
    ObjectCreate(cid, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
    ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
    ObjectSetInteger(cid, name, OBJPROP_XSIZE, w);
@@ -463,7 +461,7 @@ void MakeLabel(long cid, string name, int x, int y, string text, color clr,
    if(ObjectFind(cid, name) < 0)
    {
       ObjectCreate(cid, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
       ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
       ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
       ObjectSetString(cid, name, OBJPROP_FONT, font);
@@ -489,36 +487,36 @@ void CreateTable(long cid)
    color cRowO   = C'55,58,62';
    color cTxt    = C'200,200,200';
 
+   // Build from bottom: rows first, then header, then title on top
    int y = TBL_MARGIN;
 
-   MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + 2, "FOREX Session", clrWhite, 9, "Arial Bold", ANCHOR_UPPER);
-   y += TBL_TITLE_H;
-
-   MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
-   int hy = y + 2;
-   MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 7, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 7, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 7, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 7, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 7, "Arial Bold");
-   y += TBL_HDR_H;
-
-   for(int i = 0; i < NUM_SESS; i++)
+   for(int r = NUM_SESS - 1; r >= 0; r--)
    {
-      color rBg = (i % 2 == 0) ? cRowE : cRowO;
-      string si = IntegerToString(i);
+      color rBg = (r % 2 == 0) ? cRowE : cRowO;
+      string si = IntegerToString(r);
       MakePanel(cid, PREFIX+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
-      int ry = y + 2;
-      MakeLabel(cid, PREFIX+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[i], clrWhite, 7);
-      MakeLabel(cid, PREFIX+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 7);
-      MakeLabel(cid, PREFIX+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 7);
-      MakeLabel(cid, PREFIX+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 7);
+      int ry = y + TBL_ROW_H - 3;
+      MakeLabel(cid, PREFIX+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[r], clrWhite, 8);
+      MakeLabel(cid, PREFIX+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 8);
+      MakeLabel(cid, PREFIX+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 8);
+      MakeLabel(cid, PREFIX+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 8);
 
-      MakePanel(cid, PREFIX+"SB_"+si, TBL_MARGIN + COL_STATUS, ry - 1, COL_STATUS_W, TBL_ROW_H - 2, C'178,34,34');
-      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
+      MakePanel(cid, PREFIX+"SB_"+si, TBL_MARGIN + COL_STATUS, y + 2, COL_STATUS_W, TBL_ROW_H - 4, C'178,34,34');
+      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, y + TBL_ROW_H - 4, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
       y += TBL_ROW_H;
    }
+
+   MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
+   int hy = y + TBL_HDR_H - 3;
+   MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 8, "Arial Bold");
+   y += TBL_HDR_H;
+
+   MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
+   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + TBL_TITLE_H - 4, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_UPPER);
 }
 
 //+------------------------------------------------------------------+
@@ -575,13 +573,13 @@ void UpdateTable(long cid)
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
 
-      MakeLabel(cid, PREFIX+"RD_"+si,  0, 0, dTxt, dClr, 7);
-      MakeLabel(cid, PREFIX+"RT1_"+si, 0, 0, sStr, C'200,200,200', 7);
-      MakeLabel(cid, PREFIX+"RT2_"+si, 0, 0, eStr, C'200,200,200', 7);
+      MakeLabel(cid, PREFIX+"RD_"+si,  0, 0, dTxt, dClr, 8);
+      MakeLabel(cid, PREFIX+"RT1_"+si, 0, 0, sStr, C'200,200,200', 8);
+      MakeLabel(cid, PREFIX+"RT2_"+si, 0, 0, eStr, C'200,200,200', 8);
 
       ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BGCOLOR, stBg);
       ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
-      MakeLabel(cid, PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 7, "Arial Bold", ANCHOR_UPPER);
+      MakeLabel(cid, PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
    }
 }
 
@@ -600,15 +598,42 @@ void CleanupChart(long cid)
 }
 
 //+------------------------------------------------------------------+
+//| Pulizia solo rettangoli/DST da un grafico (lascia tabella)       |
+//+------------------------------------------------------------------+
+void CleanupRects(long cid)
+{
+   int total = ObjectsTotal(cid);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(cid, i);
+      if(StringFind(name, PREFIX + "F_") == 0 ||
+         StringFind(name, PREFIX + "B_") == 0 ||
+         StringFind(name, PREFIX + "L_") == 0 ||
+         StringFind(name, PREFIX + "DS_") == 0 ||
+         StringFind(name, PREFIX + "DE_") == 0 ||
+         name == PREFIX + "DRAWN")
+         ObjectDelete(cid, name);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Processa un singolo grafico                                      |
 //+------------------------------------------------------------------+
 void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
 {
    bool tblExists = (ObjectFind(cid, PREFIX + "TB") >= 0);
    bool rectsExist = (ObjectFind(cid, PREFIX + "DRAWN") >= 0);
+   bool showRects = (tf < PERIOD_H4);
 
-   if(!rectsExist || forceRects)
-      DrawAllRects(cid, sym, tf);
+   if(showRects)
+   {
+      if(!rectsExist || forceRects)
+         DrawAllRects(cid, sym, tf);
+   }
+   else if(rectsExist)
+   {
+      CleanupRects(cid);
+   }
 
    if(ShowTable)
    {
