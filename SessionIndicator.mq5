@@ -8,7 +8,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "4.20"
+#property version     "4.40"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -48,7 +48,7 @@ input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,
 #define NUM_SESS     3
 #define PREFIX       "SI_"
 
-// Layout tabella (CORNER_LEFT_LOWER, basso sinistra)
+// Layout tabella (CORNER_LEFT_UPPER, posizionata in basso via calcolo altezza chart)
 #define TBL_MARGIN   8
 #define TBL_W        350
 #define TBL_TITLE_H  20
@@ -437,7 +437,7 @@ void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
       ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
    }
-   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
    ObjectSetInteger(cid, name, OBJPROP_XSIZE, w);
@@ -451,7 +451,7 @@ void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
 //| Helper: crea/aggiorna etichetta su un grafico                    |
 //+------------------------------------------------------------------+
 void MakeLabel(long cid, string name, int x, int y, string text, color clr,
-               int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_LOWER)
+               int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_UPPER)
 {
    if(ObjectFind(cid, name) < 0)
    {
@@ -459,7 +459,7 @@ void MakeLabel(long cid, string name, int x, int y, string text, color clr,
       ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
    }
-   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
    ObjectSetString(cid, name, OBJPROP_FONT, font);
@@ -476,42 +476,51 @@ void CreateTable(long cid)
 {
    if(!ShowTable) return;
 
+   // Calcola altezza chart per posizionare tabella in basso
+   int chartH = (int)ChartGetInteger(cid, CHART_HEIGHT_IN_PIXELS, 0);
+   int totalH = TBL_TITLE_H + TBL_HDR_H + NUM_SESS * TBL_ROW_H;
+   int startY = chartH - TBL_MARGIN - totalH;
+   if(startY < TBL_MARGIN) startY = TBL_MARGIN;
+
    color cTitle  = C'44,62,80';
    color cHdr    = C'52,73,94';
    color cRowE   = C'44,47,51';
    color cRowO   = C'55,58,62';
    color cTxt    = C'200,200,200';
 
-   // Build from bottom: rows first, then header, then title on top
-   int y = TBL_MARGIN;
+   int y = startY;
 
-   for(int r = NUM_SESS - 1; r >= 0; r--)
+   // Titolo in alto
+   MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
+   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + 3, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_UPPER);
+   y += TBL_TITLE_H;
+
+   // Header
+   MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
+   int hy = y + 2;
+   MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Inizio",   cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "Fine",     cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 8, "Arial Bold");
+   y += TBL_HDR_H;
+
+   // Righe sessioni (dall'alto in basso: Asia, London, New York)
+   for(int r = 0; r < NUM_SESS; r++)
    {
       color rBg = (r % 2 == 0) ? cRowE : cRowO;
       string si = IntegerToString(r);
       MakePanel(cid, PREFIX+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
-      int ry = y + 4;
+      int ry = y + 2;
       MakeLabel(cid, PREFIX+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[r], clrWhite, 8);
       MakeLabel(cid, PREFIX+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 8);
       MakeLabel(cid, PREFIX+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 8);
       MakeLabel(cid, PREFIX+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 8);
 
       MakePanel(cid, PREFIX+"SB_"+si, TBL_MARGIN + COL_STATUS, y + 2, COL_STATUS_W, TBL_ROW_H - 4, C'178,34,34');
-      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_LOWER);
+      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
       y += TBL_ROW_H;
    }
-
-   MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
-   int hy = y + 4;
-   MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 8, "Arial Bold");
-   y += TBL_HDR_H;
-
-   MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + 5, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_LOWER);
 }
 
 //+------------------------------------------------------------------+
@@ -522,17 +531,29 @@ void UpdateTable(long cid)
    if(!ShowTable) return;
 
    datetime gmt = TimeGMT();
-   MqlDateTime dtG;
-   TimeToStruct(gmt, dtG);
-   int hUTC = dtG.hour;
-   int dow = dtG.day_of_week;
+   int itOff = GetItGmtOffset(gmt);
+   datetime itTime = gmt + itOff * 3600;
+   MqlDateTime dtIT;
+   TimeToStruct(itTime, dtIT);
+   int hIT = dtIT.hour;
+   int dowIT = dtIT.day_of_week;
 
    for(int i = 0; i < NUM_SESS; i++)
    {
       string si = IntegerToString(i);
       bool dstOn = IsDstActive(g_sDstType[i], gmt);
-      int sH = dstOn ? g_sDstS[i] : g_sWinS[i];
-      int eH = dstOn ? g_sDstE[i] : g_sWinE[i];
+
+      // Orari in ora italiana
+      int sIT, eIT;
+      if(i == 1)      { sIT = LondonOpenIT;  eIT = LondonCloseIT;  }
+      else if(i == 2) { sIT = NewYorkOpenIT;  eIT = NewYorkCloseIT; }
+      else
+      {
+         int sUTC = dstOn ? g_sDstS[i] : g_sWinS[i];
+         int eUTC = dstOn ? g_sDstE[i] : g_sWinE[i];
+         sIT = (sUTC + itOff) % 24;
+         eIT = (eUTC + itOff) % 24;
+      }
 
       string dTxt;
       color  dClr;
@@ -543,27 +564,27 @@ void UpdateTable(long cid)
       else
       { dTxt = "OFF"; dClr = C'100,149,237'; }
 
-      string sStr = StringFormat("%02d:00", sH);
-      string eStr = StringFormat("%02d:00", eH);
+      string sStr = StringFormat("%02d:00", sIT);
+      string eStr = StringFormat("%02d:00", eIT);
 
-      // Open/Closed - forex market: Sun ~22:00 UTC -> Fri ~22:00 UTC
+      // Open/Closed basato su ora italiana
       bool isOpen = false;
-      if(dow >= 1 && dow <= 4)
+      if(dowIT >= 1 && dowIT <= 4)
       {
-         if(sH < eH)
-            isOpen = (hUTC >= sH && hUTC < eH);
+         if(sIT < eIT)
+            isOpen = (hIT >= sIT && hIT < eIT);
          else
-            isOpen = (hUTC >= sH || hUTC < eH);
+            isOpen = (hIT >= sIT || hIT < eIT);
       }
-      else if(dow == 5)
+      else if(dowIT == 5)
       {
-         if(sH < eH)
-            isOpen = (hUTC >= sH && hUTC < eH);
+         if(sIT < eIT)
+            isOpen = (hIT >= sIT && hIT < eIT);
          else
-            isOpen = (hUTC < eH);
+            isOpen = (hIT < eIT);
       }
-      else if(dow == 0 && sH >= 20)
-         isOpen = (hUTC >= sH);
+      else if(dowIT == 0 && sIT >= 20)
+         isOpen = (hIT >= sIT);
 
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
@@ -620,7 +641,6 @@ void CleanupRects(long cid)
 //+------------------------------------------------------------------+
 void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
 {
-   bool tblExists = (ObjectFind(cid, PREFIX + "TB") >= 0);
    bool rectsExist = (ObjectFind(cid, PREFIX + "DRAWN") >= 0);
    bool showRects = (tf < PERIOD_H4);
 
@@ -636,7 +656,7 @@ void ProcessChart(long cid, string sym, ENUM_TIMEFRAMES tf, bool forceRects)
 
    if(ShowTable)
    {
-      if(!tblExists) CreateTable(cid);
+      CreateTable(cid);
       UpdateTable(cid);
    }
 
