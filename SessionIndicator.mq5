@@ -8,7 +8,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "4.30"
+#property version     "4.40"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -500,8 +500,8 @@ void CreateTable(long cid)
    int hy = y + 2;
    MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
    MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 8, "Arial Bold");
-   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "End",      cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Inizio",   cTxt, 8, "Arial Bold");
+   MakeLabel(cid, PREFIX+"H3", TBL_MARGIN + COL_END,    hy, "Fine",     cTxt, 8, "Arial Bold");
    MakeLabel(cid, PREFIX+"H4", TBL_MARGIN + COL_STATUS, hy, "Status",   cTxt, 8, "Arial Bold");
    y += TBL_HDR_H;
 
@@ -531,17 +531,29 @@ void UpdateTable(long cid)
    if(!ShowTable) return;
 
    datetime gmt = TimeGMT();
-   MqlDateTime dtG;
-   TimeToStruct(gmt, dtG);
-   int hUTC = dtG.hour;
-   int dow = dtG.day_of_week;
+   int itOff = GetItGmtOffset(gmt);
+   datetime itTime = gmt + itOff * 3600;
+   MqlDateTime dtIT;
+   TimeToStruct(itTime, dtIT);
+   int hIT = dtIT.hour;
+   int dowIT = dtIT.day_of_week;
 
    for(int i = 0; i < NUM_SESS; i++)
    {
       string si = IntegerToString(i);
       bool dstOn = IsDstActive(g_sDstType[i], gmt);
-      int sH = dstOn ? g_sDstS[i] : g_sWinS[i];
-      int eH = dstOn ? g_sDstE[i] : g_sWinE[i];
+
+      // Orari in ora italiana
+      int sIT, eIT;
+      if(i == 1)      { sIT = LondonOpenIT;  eIT = LondonCloseIT;  }
+      else if(i == 2) { sIT = NewYorkOpenIT;  eIT = NewYorkCloseIT; }
+      else
+      {
+         int sUTC = dstOn ? g_sDstS[i] : g_sWinS[i];
+         int eUTC = dstOn ? g_sDstE[i] : g_sWinE[i];
+         sIT = (sUTC + itOff) % 24;
+         eIT = (eUTC + itOff) % 24;
+      }
 
       string dTxt;
       color  dClr;
@@ -552,27 +564,27 @@ void UpdateTable(long cid)
       else
       { dTxt = "OFF"; dClr = C'100,149,237'; }
 
-      string sStr = StringFormat("%02d:00", sH);
-      string eStr = StringFormat("%02d:00", eH);
+      string sStr = StringFormat("%02d:00", sIT);
+      string eStr = StringFormat("%02d:00", eIT);
 
-      // Open/Closed - forex market: Sun ~22:00 UTC -> Fri ~22:00 UTC
+      // Open/Closed basato su ora italiana
       bool isOpen = false;
-      if(dow >= 1 && dow <= 4)
+      if(dowIT >= 1 && dowIT <= 4)
       {
-         if(sH < eH)
-            isOpen = (hUTC >= sH && hUTC < eH);
+         if(sIT < eIT)
+            isOpen = (hIT >= sIT && hIT < eIT);
          else
-            isOpen = (hUTC >= sH || hUTC < eH);
+            isOpen = (hIT >= sIT || hIT < eIT);
       }
-      else if(dow == 5)
+      else if(dowIT == 5)
       {
-         if(sH < eH)
-            isOpen = (hUTC >= sH && hUTC < eH);
+         if(sIT < eIT)
+            isOpen = (hIT >= sIT && hIT < eIT);
          else
-            isOpen = (hUTC < eH);
+            isOpen = (hIT < eIT);
       }
-      else if(dow == 0 && sH >= 20)
-         isOpen = (hUTC >= sH);
+      else if(dowIT == 0 && sIT >= 20)
+         isOpen = (hIT >= sIT);
 
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
