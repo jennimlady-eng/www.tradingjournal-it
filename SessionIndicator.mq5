@@ -8,7 +8,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "SessionIndicator"
 #property link        ""
-#property version     "4.10"
+#property version     "4.20"
 #property indicator_chart_window
 #property indicator_plots 0
 
@@ -45,7 +45,7 @@ input int      ManualGmtOffset     = 1;                   // Offset manuale
 input string   AllowedSymbols      = "EURUSD,USDJPY,GBPJPY,GBPNZD,GBPCAD,GBPAUD,EURJPY,EURAUD,CADJPY,AUDUSD,AUDJPY";
 
 //--- Costanti ---
-#define NUM_SESS     5
+#define NUM_SESS     3
 #define PREFIX       "SI_"
 
 // Layout tabella (CORNER_LEFT_LOWER, basso sinistra)
@@ -79,10 +79,8 @@ int    g_sDstType[NUM_SESS];
 void InitSessData()
 {
    g_sName[0]="Asia";      g_sWinS[0]=22; g_sWinE[0]=7;  g_sDstS[0]=21; g_sDstE[0]=6;  g_sDstType[0]=3;
-   g_sName[1]="Tokyo";     g_sWinS[1]=23; g_sWinE[1]=7;  g_sDstS[1]=23; g_sDstE[1]=7;  g_sDstType[1]=0;
-   g_sName[2]="Shanghai";  g_sWinS[2]=1;  g_sWinE[2]=9;  g_sDstS[2]=1;  g_sDstE[2]=9;  g_sDstType[2]=0;
-   g_sName[3]="London";    g_sWinS[3]=8;  g_sWinE[3]=16; g_sDstS[3]=7;  g_sDstE[3]=15; g_sDstType[3]=1;
-   g_sName[4]="New York";  g_sWinS[4]=13; g_sWinE[4]=21; g_sDstS[4]=12; g_sDstE[4]=20; g_sDstType[4]=2;
+   g_sName[1]="London";    g_sWinS[1]=8;  g_sWinE[1]=16; g_sDstS[1]=7;  g_sDstE[1]=15; g_sDstType[1]=1;
+   g_sName[2]="New York";  g_sWinS[2]=13; g_sWinE[2]=21; g_sDstS[2]=12; g_sDstE[2]=20; g_sDstType[2]=2;
 }
 
 //+------------------------------------------------------------------+
@@ -433,13 +431,12 @@ void DrawAllRects(long cid, string sym, ENUM_TIMEFRAMES tf)
 //+------------------------------------------------------------------+
 void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
 {
-   if(ObjectFind(cid, name) >= 0)
+   if(ObjectFind(cid, name) < 0)
    {
-      ObjectSetInteger(cid, name, OBJPROP_BGCOLOR, bg);
-      ObjectSetInteger(cid, name, OBJPROP_BORDER_COLOR, bg);
-      return;
+      ObjectCreate(cid, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
    }
-   ObjectCreate(cid, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
    ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
    ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
@@ -448,28 +445,26 @@ void MakePanel(long cid, string name, int x, int y, int w, int h, color bg)
    ObjectSetInteger(cid, name, OBJPROP_BGCOLOR, bg);
    ObjectSetInteger(cid, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
    ObjectSetInteger(cid, name, OBJPROP_BORDER_COLOR, bg);
-   ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
-   ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
 }
 
 //+------------------------------------------------------------------+
 //| Helper: crea/aggiorna etichetta su un grafico                    |
 //+------------------------------------------------------------------+
 void MakeLabel(long cid, string name, int x, int y, string text, color clr,
-               int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_UPPER)
+               int fsize=8, string font="Arial", ENUM_ANCHOR_POINT anch=ANCHOR_LEFT_LOWER)
 {
    if(ObjectFind(cid, name) < 0)
    {
       ObjectCreate(cid, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
-      ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
-      ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
-      ObjectSetString(cid, name, OBJPROP_FONT, font);
-      ObjectSetInteger(cid, name, OBJPROP_FONTSIZE, fsize);
-      ObjectSetInteger(cid, name, OBJPROP_ANCHOR, anch);
       ObjectSetInteger(cid, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(cid, name, OBJPROP_HIDDEN, true);
    }
+   ObjectSetInteger(cid, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(cid, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(cid, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString(cid, name, OBJPROP_FONT, font);
+   ObjectSetInteger(cid, name, OBJPROP_FONTSIZE, fsize);
+   ObjectSetInteger(cid, name, OBJPROP_ANCHOR, anch);
    ObjectSetString(cid, name, OBJPROP_TEXT, text);
    ObjectSetInteger(cid, name, OBJPROP_COLOR, clr);
 }
@@ -495,19 +490,19 @@ void CreateTable(long cid)
       color rBg = (r % 2 == 0) ? cRowE : cRowO;
       string si = IntegerToString(r);
       MakePanel(cid, PREFIX+"RB_"+si, TBL_MARGIN, y, TBL_W, TBL_ROW_H, rBg);
-      int ry = y + TBL_ROW_H - 3;
+      int ry = y + 4;
       MakeLabel(cid, PREFIX+"RS_"+si,  TBL_MARGIN + COL_SESS,  ry, g_sName[r], clrWhite, 8);
       MakeLabel(cid, PREFIX+"RD_"+si,  TBL_MARGIN + COL_DST,   ry, "", cTxt, 8);
       MakeLabel(cid, PREFIX+"RT1_"+si, TBL_MARGIN + COL_START, ry, "", cTxt, 8);
       MakeLabel(cid, PREFIX+"RT2_"+si, TBL_MARGIN + COL_END,   ry, "", cTxt, 8);
 
       MakePanel(cid, PREFIX+"SB_"+si, TBL_MARGIN + COL_STATUS, y + 2, COL_STATUS_W, TBL_ROW_H - 4, C'178,34,34');
-      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, y + TBL_ROW_H - 4, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
+      MakeLabel(cid, PREFIX+"SS_"+si, TBL_MARGIN + COL_STATUS + COL_STATUS_W/2, ry, "Closed", clrWhite, 8, "Arial Bold", ANCHOR_LOWER);
       y += TBL_ROW_H;
    }
 
    MakePanel(cid, PREFIX+"HB", TBL_MARGIN, y, TBL_W, TBL_HDR_H, cHdr);
-   int hy = y + TBL_HDR_H - 3;
+   int hy = y + 4;
    MakeLabel(cid, PREFIX+"H0", TBL_MARGIN + COL_SESS,   hy, "Session",  cTxt, 8, "Arial Bold");
    MakeLabel(cid, PREFIX+"H1", TBL_MARGIN + COL_DST,    hy, "DST",      cTxt, 8, "Arial Bold");
    MakeLabel(cid, PREFIX+"H2", TBL_MARGIN + COL_START,  hy, "Start",    cTxt, 8, "Arial Bold");
@@ -516,7 +511,7 @@ void CreateTable(long cid)
    y += TBL_HDR_H;
 
    MakePanel(cid, PREFIX+"TB", TBL_MARGIN, y, TBL_W, TBL_TITLE_H, cTitle);
-   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + TBL_TITLE_H - 4, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_UPPER);
+   MakeLabel(cid, PREFIX+"TT", TBL_MARGIN + TBL_W/2, y + 5, "FOREX Session", clrWhite, 10, "Arial Bold", ANCHOR_LOWER);
 }
 
 //+------------------------------------------------------------------+
@@ -573,13 +568,17 @@ void UpdateTable(long cid)
       color stBg  = isOpen ? C'46,139,87' : C'178,34,34';
       string stTx = isOpen ? "Open" : "Closed";
 
-      MakeLabel(cid, PREFIX+"RD_"+si,  0, 0, dTxt, dClr, 8);
-      MakeLabel(cid, PREFIX+"RT1_"+si, 0, 0, sStr, C'200,200,200', 8);
-      MakeLabel(cid, PREFIX+"RT2_"+si, 0, 0, eStr, C'200,200,200', 8);
+      ObjectSetString(cid, PREFIX+"RD_"+si,  OBJPROP_TEXT, dTxt);
+      ObjectSetInteger(cid, PREFIX+"RD_"+si,  OBJPROP_COLOR, dClr);
+      ObjectSetString(cid, PREFIX+"RT1_"+si, OBJPROP_TEXT, sStr);
+      ObjectSetInteger(cid, PREFIX+"RT1_"+si, OBJPROP_COLOR, C'200,200,200');
+      ObjectSetString(cid, PREFIX+"RT2_"+si, OBJPROP_TEXT, eStr);
+      ObjectSetInteger(cid, PREFIX+"RT2_"+si, OBJPROP_COLOR, C'200,200,200');
 
       ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BGCOLOR, stBg);
       ObjectSetInteger(cid, PREFIX+"SB_"+si, OBJPROP_BORDER_COLOR, stBg);
-      MakeLabel(cid, PREFIX+"SS_"+si, 0, 0, stTx, clrWhite, 8, "Arial Bold", ANCHOR_UPPER);
+      ObjectSetString(cid, PREFIX+"SS_"+si, OBJPROP_TEXT, stTx);
+      ObjectSetInteger(cid, PREFIX+"SS_"+si, OBJPROP_COLOR, clrWhite);
    }
 }
 
