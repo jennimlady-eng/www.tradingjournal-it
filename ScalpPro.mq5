@@ -95,6 +95,10 @@ struct STrailState
 STrailState g_trails[];
 int         g_trailCount = 0;
 
+// --- Runtime BE/Trailing settings (editable from panel) ---
+int    g_beAfterMinutes   = 5;
+double g_trailingPips     = 10.0;
+
 // --- Panel state ---
 bool   g_priceLive        = false;
 string g_lastLivePriceTxt = "";
@@ -655,7 +659,7 @@ void CleanupTrails()
 
 void ProcessAutoBEAndTrailing()
 {
-   if(InpBEAfterMinutes <= 0 && InpTrailingPips <= 0.0) return;
+   if(g_beAfterMinutes <= 0 && g_trailingPips <= 0.0) return;
 
    int total = PositionsTotal();
    for(int i = total - 1; i >= 0; i--)
@@ -685,11 +689,18 @@ void ProcessAutoBEAndTrailing()
       int tIdx = FindTrailIndex(ticket);
       if(tIdx < 0) continue;
 
+      // --- When BE is disabled, allow trailing to work independently ---
+      if(g_beAfterMinutes <= 0 && !g_trails[tIdx].beApplied)
+      {
+         g_trails[tIdx].beApplied     = true;
+         g_trails[tIdx].highWaterMark = (ptype == POSITION_TYPE_BUY) ? bid : ask;
+      }
+
       // --- Auto BE after X minutes ---
-      if(InpBEAfterMinutes > 0 && !g_trails[tIdx].beApplied)
+      if(g_beAfterMinutes > 0 && !g_trails[tIdx].beApplied)
       {
          int elapsed = (int)(TimeCurrent() - openT) / 60;
-         if(elapsed >= InpBEAfterMinutes)
+         if(elapsed >= g_beAfterMinutes)
          {
             double beSL = NormalizeDouble(
                ptype == POSITION_TYPE_BUY ? openP + InpLockInPips * pipSize
@@ -737,7 +748,7 @@ void ProcessAutoBEAndTrailing()
       }
 
       // --- Trailing Stop (only after BE applied) ---
-      if(InpTrailingPips > 0.0 && g_trails[tIdx].beApplied)
+      if(g_trailingPips > 0.0 && g_trails[tIdx].beApplied)
       {
          double curPrice = (ptype == POSITION_TYPE_BUY) ? bid : ask;
          double hwm      = g_trails[tIdx].highWaterMark;
@@ -746,7 +757,7 @@ void ProcessAutoBEAndTrailing()
          {
             if(curPrice > hwm) g_trails[tIdx].highWaterMark = curPrice;
             double trailSL = NormalizeDouble(
-               g_trails[tIdx].highWaterMark - InpTrailingPips * pipSize, digits);
+               g_trails[tIdx].highWaterMark - g_trailingPips * pipSize, digits);
             if(trailSL > curSL + pipSize * 0.5)
             {
                double minDist = SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL) *
@@ -774,7 +785,7 @@ void ProcessAutoBEAndTrailing()
          {
             if(curPrice < hwm || hwm <= 0.0) g_trails[tIdx].highWaterMark = curPrice;
             double trailSL = NormalizeDouble(
-               g_trails[tIdx].highWaterMark + InpTrailingPips * pipSize, digits);
+               g_trails[tIdx].highWaterMark + g_trailingPips * pipSize, digits);
             if(trailSL < curSL - pipSize * 0.5 || curSL <= 0.0)
             {
                double minDist = SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL) *
@@ -1284,6 +1295,9 @@ int OnInit()
    g_lastLivePriceTxt = "";
    g_lastQuickSymbol  = "";
 
+   g_beAfterMinutes = InpBEAfterMinutes;
+   g_trailingPips   = InpTrailingPips;
+
    ParseMainSymbols();
    int sidx = FindSymbolIndex(_Symbol);
    g_mainSymbolsIdx = (sidx >= 0) ? sidx : 0;
@@ -1417,6 +1431,22 @@ void OnChartEvent(const int id, const long &lparam,
       else if(sparam == PREFIX + "sl_edit" || sparam == PREFIX + "risk_edit")
       {
          UpdateLotsLabel();
+      }
+      else if(sparam == PREFIX + "be_min_edit")
+      {
+         int val = (int)StringToInteger(ObjGetText(PREFIX + "be_min_edit"));
+         if(val < 0) val = 0;
+         g_beAfterMinutes = val;
+         if(InpDebugLogs)
+            PrintFormat("[PANEL] BE minutes changed to %d", g_beAfterMinutes);
+      }
+      else if(sparam == PREFIX + "trail_edit")
+      {
+         double val = StringToDouble(ObjGetText(PREFIX + "trail_edit"));
+         if(val < 0.0) val = 0.0;
+         g_trailingPips = val;
+         if(InpDebugLogs)
+            PrintFormat("[PANEL] Trailing pips changed to %.1f", g_trailingPips);
       }
    }
 
