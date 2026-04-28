@@ -598,14 +598,23 @@ void ProcessConfigBreakEven()
 
       double stopsLvlPips = (SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL) *
                              SymbolInfoDouble(sym, SYMBOL_POINT)) / pipSize;
-      double minProfPips  = MathMax(slDistPips, stopsLvlPips + InpLockInPips + 1.0);
+      double minProfPips  = MathMax(2.0, stopsLvlPips + InpLockInPips + 1.0);
+
+      if(profPips < 0.0)
+      {
+         g_configs[cfgIdx].stale = true;
+         PrintFormat("[BE] #%I64u at %02d:%02d: profit %.1f pips (negative): BE skipped permanently.",
+                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute,
+                     profPips);
+         continue;
+      }
 
       if(profPips < minProfPips)
       {
-         g_configs[cfgIdx].stale = true;
-         PrintFormat("[BE] #%I64u at %02d:%02d: profit %.1f pips < min %.1f pips: BE skipped.",
-                     ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute,
-                     profPips, minProfPips);
+         if(InpDebugLogs)
+            PrintFormat("[BE] #%I64u at %02d:%02d: profit %.1f pips < min %.1f pips: waiting.",
+                        ticket, g_configs[cfgIdx].hour, g_configs[cfgIdx].minute,
+                        profPips, minProfPips);
          continue;
       }
 
